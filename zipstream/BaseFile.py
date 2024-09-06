@@ -4,10 +4,11 @@ from typing import Generator
 
 class BaseFile(ABC):
     def __init__(self):
-        self.org_size = 0,  # Original uncompressed size
-        self.compr_size = 0,  # Compressed size
-        self.offset = 0,  # Offset of local file header
+        self.original_size = 0
+        self.compressed_size = 0
+        self.offset = 0  # Offset of local file header
         self.crc = 0
+        self.flags = 0b00001000  # flag about using data descriptor is always on
 
     @abstractmethod
     def generate_file_data(self) -> Generator:
@@ -22,6 +23,10 @@ class BaseFile(ABC):
 
     @property
     def size(self) -> int:
+        raise NotImplementedError
+
+    @property
+    def compression_type(self) -> int:
         raise NotImplementedError
 
     @property

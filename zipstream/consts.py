@@ -7,56 +7,65 @@ ZIP64_VERSION = 45
 ZIP32_LIMIT = (1 << 31) - 1
 UTF8_FLAG = 0x800  # utf-8 filename encoding flag
 
+
 # ZIP COMPRESSION METHODS
 COMPRESSION_STORE = 0
 COMPRESSION_DEFLATE = 8
 COMPRESSION_BZIP2 = 12
 COMPRESSION_LZMA = 14
 
-# FILE HEADER
-# READ MORE AT 4.3.12  Central directory structure
-LOCAL_FILE_STRUCT = struct.Struct(b"<4sHHHHHLLLHH")
-LOCAL_FILE_TUPLE = namedtuple("fileheader",
-                              ("signature", "version", "flags",
-                               "compression", "mod_time", "mod_date",
-                               "crc", "comp_size", "uncomp_size",
-                               "fname_len", "extra_len"))
-LOCAL_FILE_SIGNATURE = b'\x50\x4b\x03\x04'
 
-# EXTRA FIELDS
-EXTRA_STRUCT = struct.Struct(b"<HH")
-EXTRA_TUPLE = namedtuple("extra", ("signature", "size"))
-EXTRA_64_STRUCT = struct.Struct(b"<HH")
-EXTRA_64_TUPLE = namedtuple("extra64local", ("uncomp_size", "comp_size"))
-CENTRAL_DIR_EXTRA_64_STRUCT = struct.Struct(b"<HHH")
-CENTRAL_DIR_EXTRA_64_TUPLE = namedtuple(
-    "extra64cdir", ("uncomp_size", "comp_size", "offset"))
+# LOCAL FILE HEADER
+LOCAL_FILE_HEADER_SIGNATURE = b'\x50\x4b\x03\x04'
+LOCAL_FILE_HEADER_STRUCT = struct.Struct(b"<4sHHHHHLLLHH")
+LOCAL_FILE_HEADER_TUPLE = namedtuple("fileheader",
+                                     ("signature", "version", "flags",
+                                      "compression", "mod_time", "mod_date",
+                                      "crc", "comp_size", "uncomp_size",
+                                      "fname_len", "extra_len"))
+
+
+# ZIP64 EXTRA FIELD
+ZIP64_EXTRA_FIELD_SIGNATURE = b'\x01\x00'
+ZIP64_EXTRA_FIELD_STRUCT = struct.Struct(b"<2sHQQQL")
+ZIP64_EXTRA_FIELD_TUPLE = namedtuple("extra", ("signature", "extra_field_size", "size", "compressed_size", "offset", "disk_Start_number"))
+
 
 # FILE DESCRIPTOR
-DATA_DESCRIPTOR_STRUCT = struct.Struct(b"<LLL")
-DATA_DESCRIPTOR_STRUCT64 = struct.Struct(b"<LQQ")
-DATA_DESCRIPTOR_TUPLE = namedtuple("filecrc", ("crc", "comp_size", "uncomp_size"))
-DATA_DESCRIPTOR_SIGNATURE = b'\x50\x4b\x07\x08'
+ZIP64_DATA_DESCRIPTOR_SIGNATURE = b'\x50\x4b\x07\x08'
+ZIP64_DATA_DESCRIPTOR_STRUCT = struct.Struct(b"<4sLQQ")
+ZIP64_DATA_DESCRIPTOR_TUPLE = namedtuple("filecrc", ("signature", "crc", "comp_size", "uncomp_size"))
+
 
 # CENTRAL DIRECTORY FILE HEADER
-CENTRAL_DIR_LOCAL_FILE_STRUCT = struct.Struct(b"<4sBBHHHHHLLLHHHHHLL")
-CENTRAL_DIR_LOCAL_FILE_TUPLE = namedtuple("cdfileheader",
-                                          ("signature", "system", "version", "version_ndd", "flags",
+CENTRAL_DIR_FILE_HEADER_SIGNATURE = b'\x50\x4b\x01\x02'
+CENTRAL_DIR_FILE_HEADER_STRUCT = struct.Struct(b"<4sBBHHHHHLLLHHHHHLL")
+CENTRAL_DIR_FILE_HEADER_TUPLE = namedtuple("cdfileheader",
+                                           ("signature", "system", "version", "version_ndd", "flags",
                                            "compression", "mod_time", "mod_date", "crc",
                                            "comp_size", "uncomp_size", "fname_len", "extra_len",
                                            "fcomm_len", "disk_start", "attrs_int", "attrs_ext", "offset"))
-CENTRAL_DIR_FILE_HEADER_SIGNATURE = b'\x50\x4b\x01\x02'
 
-# END OF CENTRAL DIRECTORY RECORD
-CENTRAL_DIR_END_STRUCT = struct.Struct(b"<4sHHHHLLH")
-# CENTRAL_DIR_END_TUPLE = namedtuple("cdend",
-#                                    ("signature", "disk_num", "disk_cdstart", "disk_entries",
-#                                     "total_entries", "cd_size", "cd_offset", "comment_len"))
-# CENTRAL_DIR_END_SIGNATURE = b'\x50\x4b\x05\x06'
-
-ZIP64_CENTRAL_DIR_END_STRUCT = struct.Struct(b"<4sQHHIIQQQQ")
-ZIP64_CENTRAL_DIR_END_TUPLE = namedtuple("zip64end",
-                                         ("signature", "size_of_zip64_end_of_central_dir_record", "version_made_by", "version_needed_to_extract",
+# ZIP64 END OF CENTRAL DIRECTORY RECORD
+ZIP64_END_OF_CENTRAL_DIR_RECORD_SIGNATURE = b'\x50\x4b\x06\x06'
+ZIP64_END_OF_CENTRAL_DIR_RECORD_STRUCT = struct.Struct(b"<4sQHHIIQQQQ")
+ZIP64_END_OF_CENTRAL_DIR_RECORD_TUPLE = namedtuple("zip64end",
+                                                   ("signature", "size_of_zip64_end_of_central_dir_record", "version_made_by", "version_needed_to_extract",
                                           "number_of_this_disk", "cd_start", "cd_entries_this_disk", "cd_entries_total",
                                           "cd_size", "cd_offset"))
-ZIP64_CENTRAL_DIR_END_SIGNATURE = b'\x50\x4b\x06\x06'
+
+
+# END OF CENTRAL DIRECTORY LOCATOR
+END_OF_CENTRAL_DIR_LOCATOR_SIGNATURE = b'\x50\x4b\x07\x08'
+END_OF_CENTRAL_DIR_LOCATOR_STRUCT = struct.Struct(b"<4sQLL")
+END_OF_CENTRAL_DIR_LOCATOR_TUPLE = namedtuple("eocdlocator",
+                                              ("signature", "disk_with_zip64_end", "zip64_end_offset", "total_disks"))
+
+
+# END OF CENTRAL DIRECTORY RECORD
+END_OF_CENTRAL_DIR_RECORD_SIGNATURE = b'P\x4b\x05\x06'
+END_OF_CENTRAL_DIR_RECORD_STRUCT = struct.Struct(b"<4sHHHHLLH")
+END_OF_CENTRAL_DIR_RECORD_TUPLE = namedtuple("eocdlocator", ("signature", "number_of_this_disk", "number_of_disk_with_start_central_dir",
+                                                             "total_entries_on_this_disk", "total_entries_total",
+                                                             "central_directory_size", "offset_of_central_directory",
+                                                             "comment_length"))

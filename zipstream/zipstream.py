@@ -154,7 +154,7 @@ class ZipBase:
         """
         Create file header
         """
-        fields = {"signature": consts.LOCAL_FILE_SIGNATURE,
+        fields = {"signature": consts.LOCAL_FILE_HEADER_SIGNATURE,
                   "version": self.__version,
                   "flags": file_struct['flags'],
                   "compression": file_struct['cmpr_id'],
@@ -167,8 +167,8 @@ class ZipBase:
                   "extra_len": 0
                   }
 
-        head = consts.LOCAL_FILE_TUPLE(**fields)
-        head = consts.LOCAL_FILE_STRUCT.pack(*head)
+        head = consts.LOCAL_FILE_HEADER_TUPLE(**fields)
+        head = consts.LOCAL_FILE_HEADER_STRUCT.pack(*head)
         head += file_struct['fname']
         return head
 
@@ -184,10 +184,10 @@ class ZipBase:
         fields = {"uncomp_size": file_struct['size'],
                   "comp_size": file_struct['csize'],
                   "crc": file_struct['crc']}
-        descriptor = consts.DATA_DESCRIPTOR_TUPLE(**fields)
+        descriptor = consts.ZIP64_DATA_DESCRIPTOR_TUPLE(**fields)
         descriptor = consts.DATA_DESCRIPTOR_STRUCT.pack(*descriptor)
         if self.__use_data_descriptor_signature:
-            descriptor = consts.DATA_DESCRIPTOR_SIGNATURE + descriptor
+            descriptor = consts.ZIP64_DATA_DESCRIPTOR_SIGNATURE + descriptor
 
         return descriptor
 
@@ -213,8 +213,8 @@ class ZipBase:
                   "disk_start": 0,
                   "attrs_int": 0,
                   "attrs_ext": 0}
-        cdfh = consts.CENTRAL_DIR_LOCAL_FILE_TUPLE(**fields)
-        cdfh = consts.CENTRAL_DIR_LOCAL_FILE_STRUCT.pack(*cdfh)
+        cdfh = consts.CENTRAL_DIR_FILE_HEADER_TUPLE(**fields)
+        cdfh = consts.CENTRAL_DIR_FILE_HEADER_STRUCT.pack(*cdfh)
         cdfh += file_struct['fname']
         return cdfh
 
@@ -223,7 +223,7 @@ class ZipBase:
         make end of central directory record
         """
 
-        fields = {"signature": consts.ZIP64_CENTRAL_DIR_END_SIGNATURE,
+        fields = {"signature": consts.ZIP64_END_OF_CENTRAL_DIR_RECORD_SIGNATURE,
                   "size_of_zip64_end_of_central_dir_record": self.__cdir_size,
                   "version_made_by": 0x03,  # UNIX
                   "version_needed_to_extract": self.__version,
@@ -235,8 +235,8 @@ class ZipBase:
                   "cd_offset": self.__offset
                   }
 
-        cdend = consts.ZIP64_CENTRAL_DIR_END_TUPLE(**fields)
-        cdend = consts.ZIP64_CENTRAL_DIR_END_STRUCT.pack(*cdend)
+        cdend = consts.ZIP64_END_OF_CENTRAL_DIR_RECORD_TUPLE(**fields)
+        cdend = consts.ZIP64_END_OF_CENTRAL_DIR_RECORD_STRUCT.pack(*cdend)
         return cdend
 
     def _make_end_structures(self):

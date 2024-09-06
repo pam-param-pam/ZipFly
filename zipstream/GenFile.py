@@ -23,8 +23,8 @@ class GenFile(BaseFile):
         try:
             return self._name_path.encode("ascii")
         except UnicodeError:
+            self.flags |= consts.UTF8_FLAG
             return self._name_path.encode("utf-8")
-            #self.flags |= consts.UTF8_FLAG
 
     @property
     def size(self) -> int:
@@ -42,5 +42,7 @@ class GenFile(BaseFile):
     def compression_method(self):
         return None
 
-
+    @property
+    def compression_type(self):
+        return 0  # no compression
 
