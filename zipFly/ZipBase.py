@@ -63,7 +63,6 @@ class ZipBase:
         """
         Create central directory file header for ZIP64 archive.  (4.3.12)
         """
-
         fields = {
             "signature": consts.CENTRAL_DIR_FILE_HEADER_SIGNATURE,
             "system": self.__OS_version,  # 0x03 - Unix
@@ -126,8 +125,7 @@ class ZipBase:
             "cd_size": self.__cdir_size,
             "cd_offset": self.__offset_to_start_of_central_dir
         }
-        print("offset_to_start_of_central_dir")
-        print(self.__offset_to_start_of_central_dir)
+
         cdend = consts.ZIP64_END_OF_CENTRAL_DIR_RECORD_TUPLE(**fields)
         cdend = consts.ZIP64_END_OF_CENTRAL_DIR_RECORD_STRUCT.pack(*cdend)
 
@@ -143,8 +141,7 @@ class ZipBase:
             "zip64_end_offset": self.__offset,
             "total_disks": 1
         }
-        print("locator offset")
-        print(self.__offset)
+
         locator = consts.ZIP64_END_OF_CENTRAL_DIR_LOCATOR_TUPLE(**fields)
 
         locator = consts.ZIP64_END_OF_CENTRAL_DIR_LOCATOR_STRUCT.pack(*locator)
@@ -208,11 +205,9 @@ class ZipBase:
             self.__offset += len(chunk)
             yield chunk
 
-        chunk = self._make_zip64_end_of_cdir_record()
-        yield chunk
+        yield self._make_zip64_end_of_cdir_record()
 
-        chunk = self._make_zip64_end_of_cdir_locator()
-        yield chunk
+        yield self._make_zip64_end_of_cdir_locator()
 
         yield self._make_end_of_cdir_record()
 

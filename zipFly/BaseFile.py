@@ -12,7 +12,7 @@ class BaseFile(ABC):
         self.offset = 0  # Offset of local file header
         self.crc = 0
         self.flags = 0b00001000  # flag about using data descriptor is always on
-        self.compression_method = compression_method or consts.COMPRESSION_STORE
+        self.compression_method = compression_method or consts.NO_COMPRESSION
         self.test = "test"
 
     def generate_processed_file_data(self) -> Generator:
