@@ -1,15 +1,40 @@
-import zlib
+from collections import defaultdict
 from typing import List
-import zipfile
+
 from zipFly import consts
 from zipFly.BaseFile import BaseFile
 
+
+def process_file_names(files):
+    # Dictionary to keep track of the count of names
+    name_counts = defaultdict(int)
+
+    for file in files:
+        # Split the name into base and extension
+        base, ext = file.name.rsplit('.', 1) if '.' in file.name else (file.name, '')
+
+        # Increment the count for this base name
+        name_counts[base] += 1
+
+        # Append the count to the base name if it's not the first occurrence
+        if name_counts[base] > 1:
+            new_base = f"{base} ({name_counts[base] - 1})"
+        else:
+            new_base = base
+
+        # Reassemble the filename
+        file.name = f"{new_base}.{ext}" if ext else new_base
+
+    return files
 
 class ZipBase:
 
     def __init__(self, files: List[BaseFile]):
         self.__version = 45
-        self.files = files
+
+        # process file names to make sure there are no duplicates
+        processed_files = process_file_names(files)
+        self.files = processed_files
 
         self.__offset = 0  # Tracks the current offset within the ZIP archive
         self.__cdir_size = 0

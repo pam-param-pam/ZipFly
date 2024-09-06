@@ -21,7 +21,7 @@ class GenFile(BaseFile):
 
     @property
     def size(self) -> int:
-        if self._size:
+        if self._size is not None:
             return self._size
         raise ValueError("Archive size not known before streaming. Probably GenFile() is missing size attribute.")
 
