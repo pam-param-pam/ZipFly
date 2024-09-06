@@ -1,8 +1,8 @@
 # ZipFly
 
-ZipFly is a library for creating & streaming zip64 archives "on the fly".
+### ZipFly is a library for creating & streaming ZIP64 archives "on the fly".
 
-It allows to create/fetch file content dynamically while the archive is streamed.
+**It allows to create/fetch file content dynamically while the archive is streamed.**
 
 - No temporary files, data is streamed directly
 - Supported `deflate` compression method
@@ -14,7 +14,7 @@ It allows to create/fetch file content dynamically while the archive is streamed
 - `Zip64` format compatible files
 
 
-This library is based upon [this library](https://twitter.com/) <sub>_(this library was a piece of work...)_<sub>
+This library is based upon [this library](https://github.com/kbbdy/zipstream) <sub>_(this library was a piece of work...)_<sub>
 
 ## Typical Usage
 
@@ -53,7 +53,7 @@ file2 = LocalFile(file_path='files/as61aade2ebfd.mp4', compression_method=consts
 files = [file1, file2]
 
 zip_stream = ZipFly(files)
-archive_size = zip_stream.calculate_archive_size()
+archive_size = zip_stream.calculate_archive_size() # raises ValueError if it can't calculate size
 
 # for example you can set as content length in http response
 response['Content-Length'] = archive_size
@@ -62,6 +62,12 @@ for chunk in zip_stream.stream():
        # do something
 
 ```
+### Other
+I created this library for my I Drive project.
+
+If you have a different case scenario, and LocalFile and GenFile are not enough, you can extend BaseFile and everything else should work out of the box.
+
+
 
 ### PS
 

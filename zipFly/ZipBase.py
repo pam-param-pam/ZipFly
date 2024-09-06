@@ -7,7 +7,7 @@ from zipFly.BaseFile import BaseFile
 
 class ZipBase:
 
-    def __init__(self, files: List[BaseFile], chunksize=8024):
+    def __init__(self, files: List[BaseFile]):
         self.__version = 45
         self.files = files
 
@@ -16,7 +16,7 @@ class ZipBase:
         self.__zip64_end_cdir_offset = 0
         self.__OS_version = 0x03  # UNIX
 
-    def _make_local_file_header(self, file: BaseFile):
+    def _make_local_file_header(self, file: BaseFile) -> bytes:
         """
         Create local file header for a ZIP64 archive   (4.3.7)
         """
@@ -42,7 +42,7 @@ class ZipBase:
 
         return header
 
-    def _make_data_descriptor(self, file: BaseFile):
+    def _make_data_descriptor(self, file: BaseFile) -> bytes:
         """
         Create data descriptor.  (4.3.9)
         """
@@ -59,7 +59,7 @@ class ZipBase:
 
         return descriptor
 
-    def _make_cdir_file_header(self, file: BaseFile):
+    def _make_cdir_file_header(self, file: BaseFile) -> bytes:
         """
         Create central directory file header for ZIP64 archive.  (4.3.12)
         """
@@ -84,24 +84,23 @@ class ZipBase:
             "offset": 0xFFFFFFFF  # Placeholder (will be updated in zip64 extra field)
         }
 
-        # Pack the central directory file header structure
         cdfh = consts.CENTRAL_DIR_FILE_HEADER_TUPLE(**fields)
         cdfh = consts.CENTRAL_DIR_FILE_HEADER_STRUCT.pack(*cdfh)
         cdfh += file.file_path_bytes
 
         return cdfh
 
-    def _make_zip64_extra_field(self, file: BaseFile):
+    def _make_zip64_extra_field(self, file: BaseFile) -> bytes:
         """
         Create the ZIP64 extra field.  (4.5.3)
         """
         fields = {
-            "signature": consts.ZIP64_EXTRA_FIELD_SIGNATURE,  # ZIP64 extra field format
-            "extra_field_size": 28,  # Size of the extra field (28 bytes)
-            "size": file.original_size,  # Original uncompressed size
-            "compressed_size": file.compressed_size,  # Compressed size
-            "offset": file.offset,  # Offset of local file header
-            "disk_Start_number": 0  # Disk start number
+            "signature": consts.ZIP64_EXTRA_FIELD_SIGNATURE,
+            "extra_field_size": 28,
+            "size": file.original_size,
+            "compressed_size": file.compressed_size,
+            "offset": file.offset,
+            "disk_Start_number": 0
         }
 
         extra = consts.ZIP64_EXTRA_FIELD_TUPLE(**fields)
@@ -109,7 +108,7 @@ class ZipBase:
 
         return extra
 
-    def _make_zip64_end_of_cdir_record(self):
+    def _make_zip64_end_of_cdir_record(self) -> bytes:
         """
         Create the ZIP64 end of central directory record.  (4.3.14)
         """
@@ -131,7 +130,7 @@ class ZipBase:
 
         return cdend
 
-    def _make_zip64_end_of_cdir_locator(self):
+    def _make_zip64_end_of_cdir_locator(self) -> bytes:
         """
         Create the ZIP64 end of central directory locator.  (4.3.15)
         """
@@ -148,7 +147,7 @@ class ZipBase:
 
         return locator
 
-    def _make_end_of_cdir_record(self):
+    def _make_end_of_cdir_record(self) -> bytes:
         """
         Create the end of central directory record.  (4.3.16)
         """
@@ -160,7 +159,6 @@ class ZipBase:
             "total_entries_total": len(self.files),
             "central_directory_size": 0xFFFFFFFF,
             "offset_of_central_directory": 0xFFFFFFFF,
-            # "offset_of_central_directory": self.__offset_to_start_of_central_dir,  # Corrected to use the proper offset
             "comment_length": 0  # No comment
         }
 
@@ -169,15 +167,15 @@ class ZipBase:
 
         return eocd
 
-    def get_offset(self):
+    def get_offset(self) -> int:
         return self.__offset
 
-    def add_offset(self, value):
+    def add_offset(self, value: int) -> None:
         self.__offset += value
 
-    def _stream_single_file(self, file: BaseFile):
+    def _stream_single_file(self, file: BaseFile) -> bytes:
         """
-        stream single zip file with header and descriptor at the end
+        stream single zip file with header and descriptor at the end.
         """
         yield self._make_local_file_header(file)
 
@@ -185,7 +183,7 @@ class ZipBase:
 
         yield self._make_data_descriptor(file)
 
-    def _make_end_structures(self):
+    def _make_end_structures(self) -> bytes:
         """
         Make zip64 end structures, which include:
             central directory file header for every file,
@@ -194,10 +192,10 @@ class ZipBase:
             zip64 end of central dir locator
             end of central dir record
         """
-
-        # Stream central directory entries
+        # Save offset to start of central dir for zip64 end of cdir record
         self.__offset_to_start_of_central_dir = self.__offset
 
+        # Stream central directory entries
         for file in self.files:
             chunk = self._make_cdir_file_header(file)
             chunk += self._make_zip64_extra_field(file)

@@ -23,7 +23,7 @@ class GenFile(BaseFile):
     def size(self) -> int:
         if self._size:
             return self._size
-        raise ValueError("size not known before streaming")
+        raise ValueError("Archive size not known before streaming. Probably GenFile() is missing size attribute.")
 
     @property
     def modification_time(self) -> float:
