@@ -1,6 +1,6 @@
 # ZipFly
 
-### ZipFly is a library for creating & streaming ZIP64 archives "on the fly".
+### ZipFly is a library for creating & streaming ZIP64 archives "on the fly"
 
 **It allows to create/fetch file content dynamically while the archive is streamed.**
 
@@ -23,15 +23,15 @@ from zipFly import ZipFly, LocalFile, consts
 # compression_method is optional, defaults to consts.NO_COMPRESSION
 file1 = LocalFile(file_path='files/lqbfa61deebf1.mp4', compression_method=consts.NO_COMPRESSION) #  or consts.COMPRESSION_DEFLATE 
 file2 = LocalFile(file_path='public/2ae9dcd01a3aa.mp4', name="files/my_file2.mp4")  # override the file name
-file3 = LocalFile(file_path='files/4shaw1dax4da.mp4', name="my_file3.mp4")  # You control the directory path by specifying it in name
+file3 = LocalFile(file_path='files/4shaw1dax4da.mp4', name="my_file3.mp4")  # you control the directory path by specifying it in name
 
 files = [file1, file2, file3]
 
-zip_stream = ZipFly(files)
+zipFly = ZipFly(files)
 
 # save to file, or do something else with the stream() generator
 with open("out/file.zip", 'wb') as f_out:
-    for chunk in zip_stream.stream():
+    for chunk in zipFly.stream():
         f_out.write(chunk)
 ```
 
@@ -52,13 +52,13 @@ file2 = LocalFile(file_path='files/as61aade2ebfd.mp4', compression_method=consts
 
 files = [file1, file2]
 
-zip_stream = ZipFly(files)
-archive_size = zip_stream.calculate_archive_size() # raises ValueError if it can't calculate size
+zipFly = ZipFly(files)
+archive_size = zipFly.calculate_archive_size() # raises ValueError if it can't calculate size
 
 # for example you can set as content length in http response
 response['Content-Length'] = archive_size
 
-for chunk in zip_stream.stream():
+for chunk in zipFly.stream():
        # do something
 
 ```
