@@ -1,43 +1,8 @@
 import zlib
 from typing import List
-
-from zipstream import consts
-from zipstream.BaseFile import BaseFile
-
-
-class Compressor:
-    def __init__(self, file: BaseFile):
-        self.file = file
-        if file.compression_method == 0:
-            self.process = self._process_through
-            self.tail = self._no_tail
-        elif file.compression_method == 8:  # deflate compression
-            self.compr = zlib.compressobj(5, zlib.DEFLATED, -15)
-            self.process = self._process_deflate
-            self.tail = self._tail_deflate
-
-    # no compression
-    def _process_through(self, chunk):
-        self.file.original_size += len(chunk)
-        self.file.compressed_size += len(chunk)
-        self.file.crc = zlib.crc32(chunk, self.file.crc)
-        return chunk
-
-    def _no_tail(self):
-        return b''
-
-    # deflate compression
-    def _process_deflate(self, chunk):
-        self.file.original_size += len(chunk)
-        self.file.crc = zlib.crc32(chunk, self.file.crc)
-        chunk = self.compr.compress(chunk)
-        self.file.compressed_size += len(chunk)
-        return chunk
-
-    def _tail_deflate(self):
-        chunk = self.compr.flush(zlib.Z_FINISH)
-        self.file.compressed_size += len(chunk)
-        return chunk
+import zipfile
+from zipFly import consts
+from zipFly.BaseFile import BaseFile
 
 
 class ZipBase:
@@ -67,7 +32,7 @@ class ZipBase:
             "uncomp_size": 0xFFFFFFFF,  # Placeholder (will be updated in data descriptor)
             "comp_size": 0xFFFFFFFF,  # Placeholder (will be updated in data descriptor)
             "fname_len": len(file.file_path_bytes),
-            "extra_len": 0
+            "extra_len": 0  # 0 cuz no extra field is used with local file header
         }
 
         # Pack the local file header structure
@@ -151,7 +116,7 @@ class ZipBase:
         """
         fields = {
             "signature": consts.ZIP64_END_OF_CENTRAL_DIR_RECORD_SIGNATURE,
-            "size_of_zip64_end_of_central_dir_record": 44 + self.__cdir_size,  # 44 bytes for the ZIP64 end of central directory record itself
+            "size_of_zip64_end_of_central_dir_record": 44,  # 44 bytes for the ZIP64 end of central directory record itself
             "version_made_by": self.__OS_version,  # I have no clue why in the docs it's called 'version made by'. It's actually OS, check(4.4.2)
             "version_needed_to_extract": self.__version,
             "number_of_this_disk": 0,
@@ -159,9 +124,10 @@ class ZipBase:
             "cd_entries_this_disk": len(self.files),
             "cd_entries_total": len(self.files),
             "cd_size": self.__cdir_size,
-            "cd_offset": self.__offset
+            "cd_offset": self.__offset_to_start_of_central_dir
         }
-
+        print("offset_to_start_of_central_dir")
+        print(self.__offset_to_start_of_central_dir)
         cdend = consts.ZIP64_END_OF_CENTRAL_DIR_RECORD_TUPLE(**fields)
         cdend = consts.ZIP64_END_OF_CENTRAL_DIR_RECORD_STRUCT.pack(*cdend)
 
@@ -172,14 +138,16 @@ class ZipBase:
         Create the ZIP64 end of central directory locator.  (4.3.15)
         """
         fields = {
-            "signature": consts.END_OF_CENTRAL_DIR_LOCATOR_SIGNATURE,
+            "signature": consts.ZIP64_END_OF_CENTRAL_DIR_LOCATOR_SIGNATURE,
             "disk_with_zip64_end": 0,
-            "zip64_end_offset": self.__zip64_end_cdir_offset,
+            "zip64_end_offset": self.__offset,
             "total_disks": 1
         }
+        print("locator offset")
+        print(self.__offset)
+        locator = consts.ZIP64_END_OF_CENTRAL_DIR_LOCATOR_TUPLE(**fields)
 
-        locator = consts.END_OF_CENTRAL_DIR_LOCATOR_TUPLE(**fields)
-        locator = consts.END_OF_CENTRAL_DIR_LOCATOR_STRUCT.pack(*locator)
+        locator = consts.ZIP64_END_OF_CENTRAL_DIR_LOCATOR_STRUCT.pack(*locator)
 
         return locator
 
@@ -187,19 +155,18 @@ class ZipBase:
         """
         Create the end of central directory record.  (4.3.16)
         """
-        # Set the fields for the end of central directory record
         fields = {
-            "signature": consts.END_OF_CENTRAL_DIR_RECORD_SIGNATURE,  # End of central directory record signature
+            "signature": consts.END_OF_CENTRAL_DIR_RECORD_SIGNATURE,
             "number_of_this_disk": 0,
             "number_of_disk_with_start_central_dir": 0,
             "total_entries_on_this_disk": len(self.files),
             "total_entries_total": len(self.files),
-            "central_directory_size": self.__cdir_size,
-            "offset_of_central_directory": self.__zip64_end_cdir_offset,  # Corrected to use the proper offset
+            "central_directory_size": 0xFFFFFFFF,
+            "offset_of_central_directory": 0xFFFFFFFF,
+            # "offset_of_central_directory": self.__offset_to_start_of_central_dir,  # Corrected to use the proper offset
             "comment_length": 0  # No comment
         }
 
-        # Pack the fields into the ZIP64 end of central directory locator format
         eocd = consts.END_OF_CENTRAL_DIR_RECORD_TUPLE(**fields)
         eocd = consts.END_OF_CENTRAL_DIR_RECORD_STRUCT.pack(*eocd)
 
@@ -217,86 +184,35 @@ class ZipBase:
         """
         yield self._make_local_file_header(file)
 
-        pcs = Compressor(file)
-        for chunk in file.generate_file_data():
-            chunk = pcs.process(chunk)
-            if len(chunk) > 0:
-                yield chunk
-        chunk = pcs.tail()
-        if len(chunk) > 0:
-            yield chunk
+        yield from file.generate_processed_file_data()
 
         yield self._make_data_descriptor(file)
 
     def _make_end_structures(self):
         """
         Make zip64 end structures, which include:
-            central directory file header,
-            zip64 extra fields,
+            central directory file header for every file,
+            zip64 extra fields for every file,
             zip64 end of central dir record,
             zip64 end of central dir locator
             end of central dir record
         """
+
         # Stream central directory entries
+        self.__offset_to_start_of_central_dir = self.__offset
+
         for file in self.files:
             chunk = self._make_cdir_file_header(file)
             chunk += self._make_zip64_extra_field(file)
             self.__cdir_size += len(chunk)
+            self.__offset += len(chunk)
             yield chunk
 
-        self.__zip64_end_cdir_offset = self.__offset  # save relative offset of the zip64 before streaming
-        yield self._make_zip64_end_of_cdir_record()
-        yield self._make_zip64_end_of_cdir_locator()
+        chunk = self._make_zip64_end_of_cdir_record()
+        yield chunk
 
+        chunk = self._make_zip64_end_of_cdir_locator()
+        yield chunk
 
-class ZipFly(ZipBase):
-
-    def calculate_archive_size(self):
-        LOCAL_FILE_HEADER_SIZE = 30
-        DATA_DESCRIPTOR_SIZE = 16
-        CENTRAL_DIR_HEADER_SIZE = 46
-        ZIP64_EXTRA_FIELD_SIZE = 28
-        ZIP64_END_OF_CENTRAL_DIR_RECORD_SIZE = 56
-        ZIP64_END_OF_CENTRAL_DIR_LOCATOR_SIZE = 20
-        EOCD_RECORD_SIZE = 22
-
-        total_size = 0
-        central_directory_size = 0
-
-        for file in self.files:
-            # Local File Header: 30 bytes + length of the filename
-            local_file_header_size = LOCAL_FILE_HEADER_SIZE + len(file.file_path_bytes)
-
-            # Central Directory Header: 46 bytes + filename length + ZIP64 extra field (28 bytes)
-            central_directory_header_size = CENTRAL_DIR_HEADER_SIZE + len(file.file_path_bytes) + ZIP64_EXTRA_FIELD_SIZE
-
-            # Add the sizes to the total size
-            total_size += local_file_header_size  # Local File Header
-            total_size += file.size  # File Data (compressed size)
-            total_size += DATA_DESCRIPTOR_SIZE  # Data Descriptor
-            # Track central directory size separately
-            central_directory_size += central_directory_header_size
-
-            # todo somewhere im adding 12 bytes too little per file.
-            total_size += 12
-        # Add central directory size to the total size
-        total_size += central_directory_size
-
-        # Add ZIP64 end of central directory structures
-        total_size += ZIP64_END_OF_CENTRAL_DIR_RECORD_SIZE  # ZIP64 end of central directory record
-        total_size += ZIP64_END_OF_CENTRAL_DIR_LOCATOR_SIZE  # ZIP64 end of central directory locator
-        total_size += EOCD_RECORD_SIZE  # End of central directory record
-
-        return total_size
-
-    def stream(self):
-        for file in self.files:
-            file.offset = self.get_offset()
-            for chunk in self._stream_single_file(file):
-                self.add_offset(len(chunk))
-                yield chunk
-
-        # stream zip structures
-        for chunk in self._make_end_structures():
-            yield chunk
         yield self._make_end_of_cdir_record()
+
