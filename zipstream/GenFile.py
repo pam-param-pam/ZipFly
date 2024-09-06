@@ -8,23 +8,19 @@ from zipstream.BaseFile import BaseFile
 
 class GenFile(BaseFile):
 
-    def __init__(self, name_path: str, generator: Generator, size: int): #, modification_time: localtime
+    def __init__(self, file_path: str, generator: Generator, size: int, modification_time):
         super().__init__()
-        self._name_path = name_path
+        self._file_path = file_path
         self.generator = generator
         self._size = size
-        self._modification_time = time.time()
+        self._modification_time = modification_time
 
     def generate_file_data(self) -> Generator:
         yield from self.generator
 
     @property
-    def name_path(self) -> bytes:
-        try:
-            return self._name_path.encode("ascii")
-        except UnicodeError:
-            self.flags |= consts.UTF8_FLAG
-            return self._name_path.encode("utf-8")
+    def file_path(self):
+        return self._file_path
 
     @property
     def size(self) -> int:
@@ -39,10 +35,7 @@ class GenFile(BaseFile):
         return True
 
     @property
-    def compression_method(self):
-        return None
-
-    @property
-    def compression_type(self):
+    def compression_method(self) -> int:
         return 0  # no compression
+
 

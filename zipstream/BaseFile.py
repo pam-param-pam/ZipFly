@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Generator
 
+from zipstream import consts
+
 
 class BaseFile(ABC):
     def __init__(self):
@@ -15,18 +17,10 @@ class BaseFile(ABC):
         raise NotImplementedError
 
     def __str__(self):
-        return f"FILE[{self.name_path}]"
-
-    @property
-    def name_path(self) -> str:
-        raise NotImplementedError
+        return f"FILE[{self.file_path}]"
 
     @property
     def size(self) -> int:
-        raise NotImplementedError
-
-    @property
-    def compression_type(self) -> int:
         raise NotImplementedError
 
     @property
@@ -44,5 +38,17 @@ class BaseFile(ABC):
         raise NotImplementedError
 
     @property
-    def compression_method(self):
+    def file_path(self):
         raise NotImplementedError
+
+    @property
+    def compression_method(self) -> int:
+        raise NotImplementedError
+
+    @property
+    def file_path_bytes(self) -> bytes:
+        try:
+            return self.file_path.encode("ascii")
+        except UnicodeError:
+            self.flags |= consts.UTF8_FLAG
+            return self.file_path.encode("utf-8")
