@@ -2,7 +2,9 @@ import os
 from typing import Generator
 from zipFly.BaseFile import BaseFile
 
+
 class LocalFile(BaseFile):
+
     def __init__(self, file_path: str, name: str = None, compression_method: int = None):
         self._file_path = file_path
         self.chunk_size = 1048
@@ -29,3 +31,5 @@ class LocalFile(BaseFile):
     def modification_time(self) -> float:
         return os.path.getmtime(self._file_path)
 
+    def set_file_name(self, new_name: str) -> None:
+        self._name = new_name

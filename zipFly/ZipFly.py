@@ -36,13 +36,3 @@ class ZipFly(ZipBase):
 
         return total_size
 
-    def stream(self):
-        for file in self.files:
-            file.offset = self.get_offset()
-            for chunk in self._stream_single_file(file):
-                self.add_offset(len(chunk))
-                yield chunk
-
-        # stream zip structures
-        for chunk in self._make_end_structures():
-            yield chunk
