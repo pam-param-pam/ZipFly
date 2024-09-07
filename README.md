@@ -5,12 +5,14 @@
 **It allows to create/fetch file content dynamically while the archive is streamed.**
 
 - No temporary files, data is streamed directly
+- Ability to calculate archive size before streaming even begins
 - Supported `deflate` compression method
 - Small memory usage, streaming is done using yield statement
 - Archive structure is created on the fly, and all data can be created during stream
 - Files included into archive can be generated on the fly using Python generators
 - **Independent of the goofy 🤮🤮 python's standard ZipFile implementation**
 - No dependencies
+- Automatic detection and changing of duplicate names
 - `Zip64` format compatible files
 
 
@@ -71,7 +73,7 @@ If you have a different case scenario, and LocalFile and GenFile are not enough,
 
 ### PS
 
-I wholeheartedly hope everyone responsible for creating ZIP documentation gets slaughtered in the most gore and painful way 😊 
+I wholeheartedly hope everyone responsible for creating ZIP documentation gets slaughtered in the most gore and painful way 😊 (in game)
 
 (pls redo ur [docs](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT))
 
