@@ -20,7 +20,6 @@ class ZipFly(ZipBase):
             total_size += file.size
             total_size += DATA_DESCRIPTOR_SIZE
 
-            # Central directory
             central_directory_header_size = CENTRAL_DIR_HEADER_SIZE + len(file.file_path_bytes) + ZIP64_EXTRA_FIELD_SIZE
 
             total_size += central_directory_header_size
