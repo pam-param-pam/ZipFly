@@ -48,8 +48,8 @@ Since the Official ZIP docs are terrible, here's a detailed structure of the zip
                                                     
                                                     
     Other goofy things are:
-        'extra_field_len' in 'central directory header' is 32, even tho in the 'extra field' it self, the 'extra_field_size' is 28. That's because the first
-        is the full length of the 'extra field' structure, while the second doesn't not include 'extra_field_size' and
+        'extra_field_len' in 'central directory header' is 28, even tho in the 'extra field' it self, the 'extra_field_size' is 24. That's because the first
+        is the full length of the 'extra field' structure, while the second doesn't include 'extra_field_size' and
         'signature' which are each 2 bytes, so together they are the 'missing' 4 bytes.
         
         'size_of_zip64_end_of_cdir_record' in zip64 end of cdir record is 44 bytes. Cuz: 'signature' - 4 bytes, 'size_of_zip64_end_of_central_dir_record' - 8 bytes,
@@ -155,7 +155,7 @@ class ZipBase:
             "compressed_size": 0xFFFFFFFF,  # Placeholder (will be updated in zip64 extra field)
             "uncompressed_size": 0xFFFFFFFF,  # Placeholder (will be updated in zip64 extra field)
             "file_name_len": len(file.file_path_bytes),
-            "extra_field_len": 32,
+            "extra_field_len": 28,
             "file_comment_len": 0,
             "disk_start": 0,
             "internal_file_attr": 0,
@@ -175,11 +175,10 @@ class ZipBase:
         """
         fields = {
             "signature": consts.ZIP64_EXTRA_FIELD_SIGNATURE,
-            "extra_field_size": 28,
+            "extra_field_size": 24,
             "size": file.original_size,
             "compressed_size": file.compressed_size,
             "offset": file.offset,
-            "disk_start": 0
         }
 
         extra = consts.ZIP64_EXTRA_FIELD_TUPLE(**fields)

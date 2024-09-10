@@ -1,5 +1,14 @@
 # ZipFly
 
+<a href="http://forthebadge.com/"><img src="https://forthebadge.com/images/badges/0-percent-optimized.svg" alt="forthebadge"/></a>
+<a href="http://forthebadge.com/"><img src="https://forthebadge.com/images/badges/gluten-free.png" alt="forthebadge"/></a>
+ <a href="http://forthebadge.com/"><img src="https://web.archive.org/web/20230604002050/https://forthebadge.com/images/badges/mom-made-pizza-rolls.svg" alt="forthebadge"/></a>
+
+<img src="https://img.shields.io/badge/ZIP64-Certified-lightGreen" alt="Build Status"/>
+<img src="https://img.shields.io/badge/build-failing-red" alt="Build Status"/>
+<img src="https://img.shields.io/badge/made with-hate-orange" alt="Build Status"/>
+<img src="https://img.shields.io/badge/fuck-zip-green" alt="Build Status"/>
+
 ### ZipFly is a library for creating & streaming ZIP64 archives "on the fly"
 
 **It allows to create/fetch file content dynamically while the archive is streamed.**

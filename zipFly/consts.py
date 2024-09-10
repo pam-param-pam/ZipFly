@@ -39,8 +39,8 @@ CENTRAL_DIR_FILE_HEADER_TUPLE = namedtuple("cdfileheader",
 
 # ZIP64 EXTRA FIELD
 ZIP64_EXTRA_FIELD_SIGNATURE = b'\x01\x00'
-ZIP64_EXTRA_FIELD_STRUCT = struct.Struct(b"<2sHQQQL")
-ZIP64_EXTRA_FIELD_TUPLE = namedtuple("extra", ("signature", "extra_field_size", "size", "compressed_size", "offset", "disk_start"))
+ZIP64_EXTRA_FIELD_STRUCT = struct.Struct(b"<2sHQQQ")
+ZIP64_EXTRA_FIELD_TUPLE = namedtuple("extra", ("signature", "extra_field_size", "size", "compressed_size", "offset"))
 
 
 # ZIP64 END OF CENTRAL DIRECTORY RECORD
