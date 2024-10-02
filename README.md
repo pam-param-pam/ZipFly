@@ -28,7 +28,7 @@
 
 This library is based upon [this library](https://github.com/kbbdy/zipstream) <sub>_(this library was a piece of work...)_<sub>
 
-## Typical Usage
+## Usage
 
 ```py
 from zipFly import ZipFly, LocalFile, consts
@@ -81,7 +81,7 @@ import asyncio
 from zipFly import ZipFly, LocalFile, consts, GenFile
 # file_generator must be async! Local file async streaming is done with aiofiles library
 file1 = GenFile(name="file.txt", generator=file_generator())
-file2 = LocalFile(file_path='public/2ae9dcd01a3aa.mp4', name="files/my_file2.mp4")  # override the file name
+file2 = LocalFile(file_path='public/2ae9dcd01a3aa.mp4', name="files/my_file2.mp4")
 
 files = [file1, file2]
 
