@@ -14,6 +14,7 @@
 **It allows to create/fetch file content dynamically while the archive is streamed.**
 
 - No temporary files, data is streamed directly
+- Support for **async* interface 
 - Ability to calculate archive size before streaming even begins
 - Supported `deflate` compression method
 - Small memory usage, streaming is done using yield statement
@@ -71,8 +72,29 @@ response['Content-Length'] = archive_size
 
 for chunk in zipFly.stream():
        # do something
-
 ```
+
+## Async interface
+
+```py
+import asyncio
+from zipFly import ZipFly, LocalFile, consts, GenFile
+# file_generator must be async! Local file async streaming is done with aiofiles library
+file1 = GenFile(name="file.txt", generator=file_generator())
+file2 = LocalFile(file_path='public/2ae9dcd01a3aa.mp4', name="files/my_file2.mp4")  # override the file name
+
+files = [file1, file2]
+
+zipFly = ZipFly(files)
+
+async def save_zip_async():
+    with open("out/file.zip", 'wb') as f_out:
+        async for chunk in zipFly.async_stream():
+            f_out.write(chunk)
+
+asyncio.run(save_zip_async())
+```
+
 ### Other
 I created this library for my I Drive project.
 
