@@ -92,8 +92,8 @@ class ZipBase:
         self.files = processed_files
 
         self.__offset = 0  # Tracks the current offset within the ZIP archive
-        self.__cdir_size = 0
-        self.__offset_to_start_of_central_dir = 0
+        self._cdir_size = 0
+        self._offset_to_start_of_central_dir = 0
         self.__version_made_by = 0x0345  # UNIX and ZIP version 45
 
     def _make_local_file_header(self, file: BaseFile) -> bytes:
@@ -199,8 +199,8 @@ class ZipBase:
             "cd_start": 0,
             "cd_entries_this_disk": len(self.files),
             "cd_entries_total": len(self.files),
-            "cd_size": self.__cdir_size,
-            "cd_offset": self.__offset_to_start_of_central_dir
+            "cd_size": self._cdir_size,
+            "cd_offset": self._offset_to_start_of_central_dir
         }
 
         cdend = consts.ZIP64_END_OF_CENTRAL_DIR_RECORD_TUPLE(**fields)
@@ -248,50 +248,9 @@ class ZipBase:
     def _add_offset(self, value: int) -> None:
         self.__offset += value
 
-    def _stream_single_file(self, file: BaseFile) -> bytes:
-        """
-        stream single zip file with header and descriptor at the end.
-        """
-        yield self._make_local_file_header(file)
+    def _get_offset(self) -> int:
+        return self.__offset
 
-        yield from file.generate_processed_file_data()
 
-        yield self._make_data_descriptor(file)
 
-    def _make_end_structures(self) -> bytes:
-        """
-        Make zip64 end structures, which include:
-            central directory file header for every file,
-            zip64 extra field for every file,
-            zip64 end of central dir record,
-            zip64 end of central dir locator
-            end of central dir record
-        """
-        # Save offset to start of central dir for zip64 end of cdir record
-        self.__offset_to_start_of_central_dir = self.__offset
 
-        # Stream central directory entries
-        for file in self.files:
-            chunk = self._make_cdir_file_header(file)
-            chunk += self._make_zip64_extra_field(file)
-            self.__cdir_size += len(chunk)
-            self._add_offset(len(chunk))
-
-            yield chunk
-
-        yield self._make_zip64_end_of_cdir_record()
-
-        yield self._make_zip64_end_of_cdir_locator()
-
-        yield self._make_end_of_cdir_record()
-
-    def stream(self):
-        for file in self.files:
-            file.offset = self.__offset
-            for chunk in self._stream_single_file(file):
-                self._add_offset(len(chunk))
-                yield chunk
-
-        # stream zip structures
-        for chunk in self._make_end_structures():
-            yield chunk

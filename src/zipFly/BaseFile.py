@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Generator
+from typing import Generator, AsyncGenerator
 
 from zipFly import consts
 from zipFly.Compressor import Compressor
@@ -17,13 +17,27 @@ class BaseFile(ABC):
     def __str__(self):
         return f"FILE[{self.name}]"
 
-    def generate_processed_file_data(self) -> Generator:
+    def generate_processed_file_data(self) -> Generator[bytes, None, None]:
         compressor = Compressor(self)
 
         """
         Generates compressed file data
         """
         for chunk in self._generate_file_data():
+            chunk = compressor.process(chunk)
+            if len(chunk) > 0:
+                yield chunk
+            chunk = compressor.tail()
+            if len(chunk) > 0:
+                yield chunk
+
+    async def async_generate_processed_file_data(self) -> AsyncGenerator[bytes, None]:
+        compressor = Compressor(self)
+
+        """
+        Generates compressed file data
+        """
+        async for chunk in self._async_generate_file_data():
             chunk = compressor.process(chunk)
             if len(chunk) > 0:
                 yield chunk
@@ -46,7 +60,11 @@ class BaseFile(ABC):
             return self.name.encode("utf-8")
 
     @abstractmethod
-    def _generate_file_data(self) -> Generator:
+    def _generate_file_data(self) -> Generator[bytes, None, None]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def _async_generate_file_data(self) -> AsyncGenerator[bytes, None]:
         raise NotImplementedError
 
     @abstractmethod

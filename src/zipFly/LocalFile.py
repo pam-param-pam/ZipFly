@@ -1,10 +1,20 @@
 import os
 import time
-from typing import Generator
+from typing import Generator, AsyncGenerator
 from zipFly.BaseFile import BaseFile
 
+import aiofiles
 
 class LocalFile(BaseFile):
+
+    async def _async_generate_file_data(self) -> AsyncGenerator[bytes, None]:
+
+        async with aiofiles.open(self._file_path, "rb") as fh:
+            while True:
+                part = await fh.read(self.chunk_size)
+                if not part:
+                    break
+                yield part
 
     def __init__(self, file_path: str, name: str = None, compression_method: int = None):
         if not os.path.isfile(file_path):
@@ -14,7 +24,7 @@ class LocalFile(BaseFile):
         self._name = name if name else file_path
         super().__init__(compression_method)
 
-    def _generate_file_data(self) -> Generator:
+    def _generate_file_data(self) -> Generator[bytes, None, None]:
         with open(self._file_path, 'rb') as file:
             while True:
                 chunk = file.read(self.chunk_size)
@@ -32,7 +42,7 @@ class LocalFile(BaseFile):
 
     @property
     def modification_time(self) -> float:
-       return os.path.getmtime(self._file_path)
+        return os.path.getmtime(self._file_path)
 
     def get_mod_time(self) -> int:
         # Extract hours, minutes, and seconds from the modification time
