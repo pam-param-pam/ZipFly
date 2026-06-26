@@ -17,7 +17,7 @@ class BaseFile(ABC):
         self.__offset = 0  # Offset to local file header
         self.__crc = 0
         self.__compression_method = compression_method
-        self.__flags = 0 if self.can_make_local_extra_field() else DATA_DESCRIPTOR_FLAG
+        self.__flags = DATA_DESCRIPTOR_FLAG
         self.__finished_file_data_streaming = False
 
         if name == "":
