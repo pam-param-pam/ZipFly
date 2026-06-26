@@ -18,8 +18,9 @@ class Compressor:
 
     # no compression
     def _process_through(self, chunk):
+        self.file.add_size(len(chunk))
         self.file.add_compressed_size(len(chunk))
-        self.file.set_crc(zlib.crc32(chunk, self.file.get_crc()))
+        self.file.update_current_crc(chunk)
         return chunk
 
     def _no_tail(self):
@@ -27,7 +28,8 @@ class Compressor:
 
     # deflate compression
     def _process_deflate(self, chunk):
-        self.file.set_crc(zlib.crc32(chunk, self.file.get_crc()))
+        self.file.update_current_crc(chunk)
+        self.file.add_size(len(chunk))
         chunk = self.compr.compress(chunk)
         self.file.add_compressed_size(len(chunk))
         return chunk

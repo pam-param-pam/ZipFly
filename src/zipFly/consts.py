@@ -22,6 +22,11 @@ LOCAL_FILE_HEADER_TUPLE = namedtuple("fileheader",
                                       "crc", "uncompressed_size", "compressed_size",
                                       "file_name_len", "extra_field_len"))
 
+# ZIP64 LOCALEXTRA FIELD
+ZIP64_LOCAL_EXTRA_FIELD_SIGNATURE = b'\x01\x00'
+ZIP64_LOCAL_EXTRA_FIELD_STRUCT = struct.Struct(b"<2sHQQ")
+ZIP64_LOCAL_EXTRA_FIELD_TUPLE = namedtuple("extra", ("signature", "extra_field_size", "size", "compressed_size"))
+
 
 # FILE DESCRIPTOR
 ZIP64_DATA_DESCRIPTOR_SIGNATURE = b'\x50\x4b\x07\x08'
@@ -39,10 +44,10 @@ CENTRAL_DIR_FILE_HEADER_TUPLE = namedtuple("cdfileheader",
                                             "file_comment_len", "disk_start", "internal_file_attr", "external_file_attr", "offset"))
 
 
-# ZIP64 EXTRA FIELD
-ZIP64_EXTRA_FIELD_SIGNATURE = b'\x01\x00'
-ZIP64_EXTRA_FIELD_STRUCT = struct.Struct(b"<2sHQQQ")
-ZIP64_EXTRA_FIELD_TUPLE = namedtuple("extra", ("signature", "extra_field_size", "size", "compressed_size", "offset"))
+# ZIP64 CDIR EXTRA FIELD
+ZIP64_CDIR_EXTRA_FIELD_SIGNATURE = b'\x01\x00'
+ZIP64_CDIR_EXTRA_FIELD_STRUCT = struct.Struct(b"<2sHQQQ")
+ZIP64_CDIR_EXTRA_FIELD_TUPLE = namedtuple("extra", ("signature", "extra_field_size", "size", "compressed_size", "offset"))
 
 
 # ZIP64 END OF CENTRAL DIRECTORY RECORD

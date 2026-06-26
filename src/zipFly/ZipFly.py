@@ -1,6 +1,6 @@
 import copy
 import types
-from typing import Generator, AsyncGenerator, Union
+from typing import Generator, AsyncGenerator, Union, AsyncIterable
 
 from . import consts
 from .BaseFile import BaseFile
@@ -77,9 +77,10 @@ class ZipFly(ZipBase):
         super().__init__(processed_files)
 
         self._LOCAL_FILE_HEADER_SIZE = 30
+        self._ZIP64_LOCAL_EXTRA_FIELD_SIZE = 20
         self._DATA_DESCRIPTOR_SIZE = 24
         self._CENTRAL_DIR_HEADER_SIZE = 46
-        self._ZIP64_EXTRA_FIELD_SIZE = 28
+        self._ZIP64_CDIR_EXTRA_FIELD_SIZE = 28
         self._ZIP64_END_OF_CDIR_RECORD_SIZE = 56
         self._ZIP64_END_OF_CDIR_LOCATOR_SIZE = 20
         self._END_OF_CDIR_RECORD_CD_RECORD_SIZE = 22
@@ -87,12 +88,6 @@ class ZipFly(ZipBase):
         self._remaining_offset = 0
         self.__used = False
         self._byte_offset = byte_offset
-
-        # As the first thing: set byte_offset_mode = true
-        # for all files that may depend on it
-        if self._byte_offset is not None:
-            for file in self._files:
-                file.set_byte_offset_mode(True)
 
     def was_used(self) -> bool:
         return self.__used
@@ -103,7 +98,11 @@ class ZipFly(ZipBase):
 
         for file in self._files:
             total_size += self._calculate_file_size_in_archive(file)
-            central_directory_header_size = self._CENTRAL_DIR_HEADER_SIZE + len(file.file_path_bytes) + self._ZIP64_EXTRA_FIELD_SIZE
+            central_directory_header_size = (
+                self._CENTRAL_DIR_HEADER_SIZE
+                + len(file.file_path_bytes)
+                + self._ZIP64_CDIR_EXTRA_FIELD_SIZE
+            )
             total_size += central_directory_header_size
 
         total_size += self._ZIP64_END_OF_CDIR_RECORD_SIZE
@@ -113,12 +112,16 @@ class ZipFly(ZipBase):
         return total_size
 
     def _calculate_file_size_in_archive(self, file: BaseFile):
-        """Returns the size of: [local file header] + [file data] + [data descriptor]"""
+        """Returns the size of: [local file header] + [LOCAL EXTRA FIELD] + [file data] + [data descriptor]"""
         block_size = 0
 
         local_file_header_size = self._LOCAL_FILE_HEADER_SIZE + len(file.file_path_bytes)
         block_size += local_file_header_size
-        block_size += file.size
+
+        if self.can_make_local_extra_field(file):
+            block_size += self._ZIP64_LOCAL_EXTRA_FIELD_SIZE
+
+        block_size += file.predicted_size
         block_size += self._DATA_DESCRIPTOR_SIZE
 
         return block_size
@@ -150,9 +153,11 @@ class ZipFly(ZipBase):
             if file.compression_method != consts.NO_COMPRESSION:
                 raise ValueError("Byte offset is supported only for non compressed files")
 
-                # We must set both crc and compressed size for the files in the archive that we entirely "skip"
-            file.set_crc(file.get_predicted_crc())
-            file.set_compressed_size(file.size)
+            # We must set both crc and compressed size for the files in the archive that we entirely "skip"
+            file.set_crc(file.predicted_crc)
+            file.set_compressed_size(file.predicted_size)
+            file.set_size(file.predicted_size)
+            file.mark_finished_file_data_streaming()
 
             running_offset += file_size_in_archive
 
@@ -173,7 +178,7 @@ class ZipFly(ZipBase):
         # Stream central directory entries
         for file in self._files:
             chunk = self._make_cdir_file_header(file)
-            chunk += self._make_zip64_extra_field(file)
+            chunk += self._make_cdir_zip64_extra_field(file)
             self._cdir_size += len(chunk)
             chunk = self._apply_remaining_offset(chunk)
             self._add_offset(len(chunk))
@@ -186,26 +191,65 @@ class ZipFly(ZipBase):
 
         yield self._apply_remaining_offset(self._make_end_of_cdir_record())
 
-    async def _async_stream_single_file(self, file: BaseFile) -> AsyncGenerator[bytes, None]:
-        """This function streams a single file, it also applies remaining_offset if needed"""
+    def can_make_local_extra_field(self, file) -> bool:
+        # Here we check if we can include offsets before file data(if its known before streaming)
+        return (
+            file.predicted_crc is not None
+            and file.predicted_size is not None
+            and file.compression_method == consts.NO_COMPRESSION
+        )
 
-        yield self._apply_remaining_offset(self._make_local_file_header(file))
+    def _stream_single_file_prefix(self, file: BaseFile) -> Generator[bytes, None, None]:
+        """
+        Stream local file header and optional local ZIP64 extra field.
+        """
+        do_local_extra_field = self.can_make_local_extra_field(file)
 
-        async for chunk in file.async_generate_processed_file_data():
+        yield self._apply_remaining_offset(self._make_local_file_header(file, do_local_extra_field))
+
+        if do_local_extra_field:
+            yield self._apply_remaining_offset(self._make_local_zip64_extra_field(file))
+
+    def _stream_single_file_suffix(self, file: BaseFile) -> Generator[bytes, None, None]:
+        """
+        Stream data descriptor.
+        """
+        yield self._apply_remaining_offset(self._make_data_descriptor(file))
+
+    async def _async_stream_single_file_from_data(self, file: BaseFile, data_chunks: AsyncIterable[bytes]) -> AsyncGenerator[bytes, None]:
+        """
+        Stream a single file using an externally supplied async data source.
+
+        Used by:
+        - _async_stream_single_file
+        - async_stream_parallel
+        """
+        for chunk in self._stream_single_file_prefix(file):
+            yield chunk
+
+        async for chunk in data_chunks:
             yield self._apply_remaining_offset(chunk)
 
-        yield self._apply_remaining_offset(self._make_data_descriptor(file))
+        for chunk in self._stream_single_file_suffix(file):
+            yield chunk
+
+    async def _async_stream_single_file(self, file: BaseFile) -> AsyncGenerator[bytes, None]:
+        """This function streams a single file, it also applies remaining_offset if needed"""
+        async for chunk in self._async_stream_single_file_from_data(file, file.async_generate_processed_file_data()):
+            yield chunk
 
     def _stream_single_file(self, file: BaseFile) -> Generator[bytes, None, None]:
         """
         stream single zip file with header and descriptor at the end.
         """
-        yield self._apply_remaining_offset(self._make_local_file_header(file))
+        for chunk in self._stream_single_file_prefix(file):
+            yield chunk
 
         for chunk in file.generate_processed_file_data():
             yield self._apply_remaining_offset(chunk)
 
-        yield self._apply_remaining_offset(self._make_data_descriptor(file))
+        for chunk in self._stream_single_file_suffix(file):
+            yield chunk
 
     async def async_stream(self) -> AsyncGenerator[bytes, None]:
         """Streams the entire archive asynchronously"""
@@ -244,29 +288,15 @@ class ZipFly(ZipBase):
             for i, file in enumerate(files):
                 await prefetch_mgr.ensure_prefetch(i)
 
-                # 1) Local File Header
                 file.set_offset(self._get_offset())
-                header = self._make_local_file_header(file)
-                header = self._apply_remaining_offset(header)
-                self._add_offset(len(header))
-                if header:
-                    yield header
 
-                # 2) Stream DATA
-                async for chunk in prefetch_mgr.stream_file_data(i):
-                    out = self._apply_remaining_offset(chunk)
-                    if out:
-                        self._add_offset(len(out))
-                        yield out
+                async for chunk in self._async_stream_single_file_from_data(file, prefetch_mgr.stream_file_data(i)):
+                    self._add_offset(len(chunk))
 
-                # 3) Data Descriptor
-                dd = self._make_data_descriptor(file)
-                dd = self._apply_remaining_offset(dd)
-                self._add_offset(len(dd))
-                if dd:
-                    yield dd
+                    if chunk:
+                        yield chunk
 
-        # 4) Central directory & end records
+        # stream zip structures
         for chunk in self._make_end_structures():
             yield chunk
 

@@ -81,7 +81,7 @@ class ZipBase:
         self._cdir_size = 0
         self._offset_to_start_of_central_dir = 0
 
-    def _make_local_file_header(self, file: BaseFile) -> bytes:
+    def _make_local_file_header(self, file: BaseFile, do_local_extra_field: bool) -> bytes:
         """
         Create local file header for a ZIP64 archive   (4.3.7)
         """
@@ -93,10 +93,10 @@ class ZipBase:
             "mod_time": file.get_mod_time(),
             "mod_date": file.get_mod_date(),
             "crc": 0,  # Correct value will be provided in data descriptor after we get all file data
-            "uncompressed_size": 0,  # Correct value will be provided in data descriptor after we get all file data
-            "compressed_size": 0,  # Correct value will be provided in data descriptor after we get all file data
+            "uncompressed_size": 0xFFFFFFFF if do_local_extra_field else 0,  # Correct value will be provided in data descriptor after we get all file data
+            "compressed_size": 0xFFFFFFFF if do_local_extra_field else 0,  # Correct value will be provided in data descriptor after we get all file data
             "file_name_len": len(file.file_path_bytes),
-            "extra_field_len": 0  # 0 cuz no extra field is used with local file header
+            "extra_field_len": 20 if do_local_extra_field else 0
         }
 
         # Pack the local file header structure
@@ -106,15 +106,32 @@ class ZipBase:
 
         return header
 
+    def _make_local_zip64_extra_field(self, file: BaseFile) -> bytes:
+        """
+        Create the ZIP64 extra field.  (4.5.3)
+        """
+
+        fields = {
+            "signature": consts.ZIP64_LOCAL_EXTRA_FIELD_SIGNATURE,
+            "extra_field_size": 16,
+            "size": file.predicted_size,
+            "compressed_size": file.predicted_size,
+        }
+
+        extra = consts.ZIP64_LOCAL_EXTRA_FIELD_TUPLE(**fields)
+        extra = consts.ZIP64_LOCAL_EXTRA_FIELD_STRUCT.pack(*extra)
+
+        return extra
+
     def _make_data_descriptor(self, file: BaseFile) -> bytes:
         """
         Create data descriptor.  (4.3.9)
         """
         fields = {
             "signature": consts.ZIP64_DATA_DESCRIPTOR_SIGNATURE,
-            "crc": file.get_crc(),
+            "crc": file.crc,
             "uncompressed_size": file.size,
-            "compressed_size": file.get_compressed_size(),
+            "compressed_size": file.compressed_size,
         }
 
         descriptor = consts.ZIP64_DATA_DESCRIPTOR_TUPLE(**fields)
@@ -134,7 +151,7 @@ class ZipBase:
             "compression_method": file.compression_method,
             "mod_time": file.get_mod_time(),
             "mod_date": file.get_mod_date(),
-            "crc": file.get_crc(),
+            "crc": file.crc,
             "compressed_size": 0xFFFFFFFF,  # Placeholder (will be updated in zip64 extra field)
             "uncompressed_size": 0xFFFFFFFF,  # Placeholder (will be updated in zip64 extra field)
             "file_name_len": len(file.file_path_bytes),
@@ -151,22 +168,22 @@ class ZipBase:
         cdfh += file.file_path_bytes
         return cdfh
 
-    def _make_zip64_extra_field(self, file: BaseFile) -> bytes:
+    def _make_cdir_zip64_extra_field(self, file: BaseFile) -> bytes:
         """
         Create the ZIP64 extra field.  (4.5.3)
         """
-        offset = file.get_offset()
+        offset = file.offset
 
         fields = {
-            "signature": consts.ZIP64_EXTRA_FIELD_SIGNATURE,
+            "signature": consts.ZIP64_CDIR_EXTRA_FIELD_SIGNATURE,
             "extra_field_size": 24,
             "size": file.size,
-            "compressed_size": file.get_compressed_size(),
+            "compressed_size": file.compressed_size,
             "offset": offset,
         }
 
-        extra = consts.ZIP64_EXTRA_FIELD_TUPLE(**fields)
-        extra = consts.ZIP64_EXTRA_FIELD_STRUCT.pack(*extra)
+        extra = consts.ZIP64_CDIR_EXTRA_FIELD_TUPLE(**fields)
+        extra = consts.ZIP64_CDIR_EXTRA_FIELD_STRUCT.pack(*extra)
 
         return extra
 

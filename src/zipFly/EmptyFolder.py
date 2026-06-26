@@ -7,7 +7,7 @@ from .BaseFile import BaseFile
 
 class EmptyFolder(BaseFile):
     def __init__(self, name: str, modification_time: float = None):
-        super().__init__(name, consts.NO_COMPRESSION)
+        super().__init__(name)
         if not name.endswith("/"):
             name += "/"
         self._name = name
@@ -27,12 +27,13 @@ class EmptyFolder(BaseFile):
         yield b''
 
     @property
-    def size(self) -> int:
+    def predicted_crc(self) -> int:
+        return 0
+
+    @property
+    def predicted_size(self) -> int:
         return 0
 
     @property
     def modification_time(self) -> float:
         return self._modification_time
-
-    def get_predicted_crc(self) -> int:
-        return 0

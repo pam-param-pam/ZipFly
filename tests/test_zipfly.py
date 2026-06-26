@@ -13,7 +13,8 @@ import pytest
 
 from src.zipFly import GenFile, LocalFile, ZipFly, consts
 from src.zipFly.EmptyFolder import EmptyFolder
-from tests.test_utils import lorem_ipsum_generator, lorem_ipsum, single_archive_size, lorem_ipsum_generator_async, multifile_archive_size, generate_data_async
+from tests.test_utils import lorem_ipsum_generator, lorem_ipsum, single_archive_size, lorem_ipsum_generator_async, multifile_archive_size, generate_data_async, \
+    single_archive_size_with_extra_field
 
 
 @pytest.mark.asyncio
@@ -212,7 +213,7 @@ def test_LocalFile_NO_COMPRESSION(tmp_path):
             print(f"{info.filename}: CRC={hex(info.CRC)}")
 
     assert lorem_ipsum == out
-    assert zip_fly.calculate_archive_size() == single_archive_size
+    assert zip_fly.calculate_archive_size() == single_archive_size_with_extra_field
 
 
 @pytest.mark.asyncio
@@ -236,7 +237,7 @@ async def test_LocalFile_NO_COMPRESSION_async(tmp_path):
         out = tfp.read()
 
     assert lorem_ipsum == out
-    assert zip_fly.calculate_archive_size() == single_archive_size
+    assert zip_fly.calculate_archive_size() == single_archive_size_with_extra_field
 
 
 def test_multifile_archive(tmp_path):

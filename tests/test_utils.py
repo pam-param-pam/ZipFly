@@ -21,6 +21,7 @@ Similique ullam et tempore sunt incidunt ipsa.
 Molestiae est harum similique aspernatur distinctio aut."""
 
 single_archive_size = 1152
+single_archive_size_with_extra_field = 1172
 multifile_archive_size = 5388
 
 

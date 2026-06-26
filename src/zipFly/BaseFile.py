@@ -1,6 +1,8 @@
 import time
+import zlib
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Generator
+from typing import Optional
 
 from . import consts
 from .Compressor import Compressor
@@ -11,13 +13,16 @@ class BaseFile(ABC):
     def __init__(self, name: str, compression_method: int = consts.NO_COMPRESSION):
         self.__used = False
         self.__compressed_size = 0
+        self.__size = 0
         self.__offset = 0  # Offset to local file header
         self.__crc = 0
         self.__compression_method = compression_method
         self.__flags = DATA_DESCRIPTOR_FLAG  # flag about using data descriptor is always on
-        self.__byte_offset_mode = False
+
+        self.__finished_file_data_streaming = False
+
         if name == "":
-            raise KeyError("File name cannot be blank.")
+            raise ValueError("File name cannot be blank.")
         self._name = name
 
     def __str__(self):
@@ -44,6 +49,8 @@ class BaseFile(ABC):
         if len(chunk) > 0:
             yield chunk
 
+        self._finish_and_validate()
+
     async def async_generate_processed_file_data(self) -> AsyncGenerator[bytes, None]:
         """Generates compressed file data"""
         self._check_if_used()
@@ -56,6 +63,19 @@ class BaseFile(ABC):
         chunk = compressor.tail()
         if len(chunk) > 0:
             yield chunk
+
+        self._finish_and_validate()
+
+    def mark_finished_file_data_streaming(self):
+        self.__finished_file_data_streaming = True
+
+    def _finish_and_validate(self):
+        self.__finished_file_data_streaming = True
+        if self.predicted_size is not None and self.predicted_size != self.size:
+            raise RuntimeError(f"Size({self.predicted_size}) != streamed size({self.size})")
+
+        if self.predicted_crc is not None and self.predicted_crc != self.crc:
+            raise RuntimeError(f"Crc({self.predicted_crc}) != streamed crc({self.crc})")
 
     def get_mod_time(self) -> int:
         # Extract hours, minutes, and seconds from the modification time
@@ -71,11 +91,8 @@ class BaseFile(ABC):
     def set_offset(self, new_offset) -> None:
         self.__offset = new_offset
 
-    def get_offset(self) -> int:
-        return self.__offset
-
-    def get_compressed_size(self) -> int:
-        return self.__compressed_size
+    def add_size(self, value) -> None:
+        self.__size += value
 
     def add_compressed_size(self, value) -> None:
         self.__compressed_size += value
@@ -83,20 +100,21 @@ class BaseFile(ABC):
     def set_compressed_size(self, new_value) -> None:
         self.__compressed_size = new_value
 
-    def get_crc(self) -> int:
-        return self.__crc
+    def set_size(self, new_value) -> None:
+        self.__size = new_value
 
     def set_crc(self, new_crc) -> None:
         self.__crc = new_crc
 
-    def set_byte_offset_mode(self, value) -> None:
-        self.__byte_offset_mode = value
-
-    def is_byte_offset_mode(self) -> bool:
-        return self.__byte_offset_mode
-
     def set_file_name(self, new_name: str) -> None:
         self._name = new_name
+
+    def update_current_crc(self, chunk):
+        self.__crc = zlib.crc32(chunk, self.__crc)
+
+    @property
+    def offset(self) -> int:
+        return self.__offset
 
     @property
     def file_path_bytes(self) -> bytes:
@@ -105,26 +123,6 @@ class BaseFile(ABC):
         except UnicodeError:
             self.__flags |= consts.UTF8_FLAG
             return self.name.encode()
-
-    @abstractmethod
-    def _generate_file_data(self) -> Generator[bytes, None, None]:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def _async_generate_file_data(self) -> AsyncGenerator[bytes, None]:
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_predicted_crc(self) -> int:
-        raise NotImplementedError
-
-    @property
-    def size(self) -> int:
-        raise NotImplementedError
-
-    @property
-    def modification_time(self) -> float:
-        raise NotImplementedError
 
     @property
     def flags(self) -> int:
@@ -138,3 +136,44 @@ class BaseFile(ABC):
     @property
     def compression_method(self) -> int:
         return self.__compression_method
+
+    @property
+    def compressed_size(self) -> int:
+        if not self.__finished_file_data_streaming:
+            raise RuntimeError("Compressed size called before file data finished streaming. Use predicted_compressed_size instead.")
+        return self.__compressed_size
+
+    @property
+    def size(self) -> int:
+        if not self.__finished_file_data_streaming:
+            raise RuntimeError("Size called before file data finished streaming. Use predicted_size instead.")
+        return self.__size
+
+    @property
+    def crc(self) -> int:
+        if not self.__finished_file_data_streaming:
+            raise RuntimeError("Crc called before file data finished streaming. Use predicted_crc instead.")
+        return self.__crc
+
+    @property
+    @abstractmethod
+    def modification_time(self) -> float:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def predicted_crc(self) -> Optional[int]:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def predicted_size(self) -> Optional[int]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _generate_file_data(self) -> Generator[bytes, None, None]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def _async_generate_file_data(self) -> AsyncGenerator[bytes, None]:
+        raise NotImplementedError

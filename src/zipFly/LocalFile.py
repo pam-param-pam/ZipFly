@@ -1,7 +1,7 @@
 import os
 import zlib
 from pathlib import Path
-from typing import Generator, AsyncGenerator, Union
+from typing import Generator, AsyncGenerator, Union, Optional
 
 import aiofiles
 
@@ -17,6 +17,8 @@ class LocalFile(BaseFile):
 
         self._file_path = str(file_path)
         self.chunk_size = chunk_size
+        self.__crc = None
+
         name = name if name else self._file_path
         super().__init__(name, compression_method)
 
@@ -49,17 +51,23 @@ class LocalFile(BaseFile):
                 yield chunk
 
     @property
-    def size(self) -> int:
-        return os.path.getsize(self._file_path)
-
-    @property
     def modification_time(self) -> float:
         """Returns the modification time as a Unix timestamp"""
         return os.path.getmtime(self._file_path)
 
-    def get_predicted_crc(self) -> int:
-        crc = 0
-        with open(self._file_path, "rb") as f:
-            while chunk := f.read(self.chunk_size):
-                crc = zlib.crc32(chunk, crc)
-        return crc & 0xFFFFFFFF
+    @property
+    def predicted_size(self) -> Optional[int]:
+        return os.path.getsize(self._file_path)
+
+    @property
+    def predicted_crc(self) -> Optional[int]:
+        if self.__crc is None:
+            crc = 0
+
+            with open(self._file_path, "rb") as f:
+                while chunk := f.read(self.chunk_size):
+                    crc = zlib.crc32(chunk, crc)
+
+            self.__crc = crc & 0xFFFFFFFF
+
+        return self.__crc
