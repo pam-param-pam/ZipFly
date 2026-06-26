@@ -9,12 +9,14 @@ Since the Official ZIP docs are terrible, here's a detailed structure of the zip
 
   [local file header 1]            |
   [file data 1]                    |
+  [OPTIONAL extra field 1]         |
   [data descriptor 1]              |
   .                                |
   .                                } - This part of the of zip holds the file data. Local file headers are lowkey useless(nevertheless needed for zip to work).
   .                                |        Data descriptors allow to stream the file(and create file headers) without knowing the size of file data. Instead of putting
   [local file header n]            |        things like: CRC, uncompressed_size, compressed_size etc in file headers, you only put placeholder values there (0xFFFFFFFF),                                    
   [file data n]                    |        and fill them later in data descriptor(after you have produced/gathered the file data, and actually know the file's metadata).
+  [OPTIONAL extra field n]         |
   [data descriptor n]              |
   
   
@@ -81,7 +83,7 @@ class ZipBase:
         self._cdir_size = 0
         self._offset_to_start_of_central_dir = 0
 
-    def _make_local_file_header(self, file: BaseFile, do_local_extra_field: bool) -> bytes:
+    def _make_local_file_header(self, file: BaseFile) -> bytes:
         """
         Create local file header for a ZIP64 archive   (4.3.7)
         """
@@ -93,10 +95,10 @@ class ZipBase:
             "mod_time": file.get_mod_time(),
             "mod_date": file.get_mod_date(),
             "crc": 0,  # Correct value will be provided in data descriptor after we get all file data
-            "uncompressed_size": 0xFFFFFFFF if do_local_extra_field else 0,  # Correct value will be provided in data descriptor after we get all file data
-            "compressed_size": 0xFFFFFFFF if do_local_extra_field else 0,  # Correct value will be provided in data descriptor after we get all file data
+            "uncompressed_size": 0xFFFFFFFF if file.can_make_local_extra_field() else 0,  # Correct value will be provided in data descriptor after we get all file data or in local extra field
+            "compressed_size": 0xFFFFFFFF if file.can_make_local_extra_field() else 0,  # Correct value will be provided in data descriptor after we get all file data or in local extra field
             "file_name_len": len(file.file_path_bytes),
-            "extra_field_len": 20 if do_local_extra_field else 0
+            "extra_field_len": 20 if file.can_make_local_extra_field() else 0
         }
 
         # Pack the local file header structure
@@ -110,7 +112,6 @@ class ZipBase:
         """
         Create the ZIP64 extra field.  (4.5.3)
         """
-
         fields = {
             "signature": consts.ZIP64_LOCAL_EXTRA_FIELD_SIGNATURE,
             "extra_field_size": 16,

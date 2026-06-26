@@ -17,8 +17,7 @@ class BaseFile(ABC):
         self.__offset = 0  # Offset to local file header
         self.__crc = 0
         self.__compression_method = compression_method
-        self.__flags = DATA_DESCRIPTOR_FLAG  # flag about using data descriptor is always on
-
+        self.__flags = 0 if self.can_make_local_extra_field() else DATA_DESCRIPTOR_FLAG
         self.__finished_file_data_streaming = False
 
         if name == "":
@@ -65,6 +64,14 @@ class BaseFile(ABC):
             yield chunk
 
         self._finish_and_validate()
+
+    def can_make_local_extra_field(self) -> bool:
+        # Here we check if we can include offsets before file data(if its known before streaming)
+        return (
+            self.predicted_crc is not None
+            and self.predicted_size is not None
+            and self.compression_method == consts.NO_COMPRESSION
+        )
 
     def mark_finished_file_data_streaming(self):
         self.__finished_file_data_streaming = True

@@ -118,7 +118,7 @@ class ZipFly(ZipBase):
         local_file_header_size = self._LOCAL_FILE_HEADER_SIZE + len(file.file_path_bytes)
         block_size += local_file_header_size
 
-        if self.can_make_local_extra_field(file):
+        if file.can_make_local_extra_field():
             block_size += self._ZIP64_LOCAL_EXTRA_FIELD_SIZE
 
         block_size += file.predicted_size
@@ -191,23 +191,13 @@ class ZipFly(ZipBase):
 
         yield self._apply_remaining_offset(self._make_end_of_cdir_record())
 
-    def can_make_local_extra_field(self, file) -> bool:
-        # Here we check if we can include offsets before file data(if its known before streaming)
-        return (
-            file.predicted_crc is not None
-            and file.predicted_size is not None
-            and file.compression_method == consts.NO_COMPRESSION
-        )
-
     def _stream_single_file_prefix(self, file: BaseFile) -> Generator[bytes, None, None]:
         """
         Stream local file header and optional local ZIP64 extra field.
         """
-        do_local_extra_field = self.can_make_local_extra_field(file)
+        yield self._apply_remaining_offset(self._make_local_file_header(file))
 
-        yield self._apply_remaining_offset(self._make_local_file_header(file, do_local_extra_field))
-
-        if do_local_extra_field:
+        if file.can_make_local_extra_field():
             yield self._apply_remaining_offset(self._make_local_zip64_extra_field(file))
 
     def _stream_single_file_suffix(self, file: BaseFile) -> Generator[bytes, None, None]:

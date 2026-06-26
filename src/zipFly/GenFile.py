@@ -14,13 +14,13 @@ class GenFile(BaseFile):
         if crc and compression_method != consts.NO_COMPRESSION:
             raise ValueError("File crc is allowed only with NO_COMPRESSION")
 
-        super().__init__(name, compression_method)
         self._generator = generator
         self._predicted_size = size
         self._predicted_crc = crc
         self._modification_time = modification_time if modification_time else time.time()
 
         self._streamed_size = 0
+        super().__init__(name, compression_method)
 
     def __str__(self):
         return f"GenFile[name={self.name}]"

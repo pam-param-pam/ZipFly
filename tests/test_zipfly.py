@@ -711,3 +711,100 @@ def test_non_ascii_file_names_utf8_flag(tmp_path):
         assert flags & UTF8_FLAG, f"UTF-8 flag missing in central dir at {sig}"
 
         offset = sig + 4
+
+
+DATA_DESCRIPTOR_FLAG = 0x0008
+
+def _parse_local_file_header(data: bytes, offset: int = 0):
+    signature = struct.unpack_from("<I", data, offset)[0]
+    assert signature == 0x04034B50
+
+    flags = struct.unpack_from("<H", data, offset + 6)[0]
+    filename_len, extra_len = struct.unpack_from("<HH", data, offset + 26)
+
+    filename_start = offset + 30
+    filename_end = filename_start + filename_len
+
+    extra_start = filename_end
+    extra_end = extra_start + extra_len
+
+    return {
+        "flags": flags,
+        "filename": data[filename_start:filename_end],
+        "extra_len": extra_len,
+        "extra": data[extra_start:extra_end],
+        "filename_start": filename_start,
+        "filename_end": filename_end,
+        "extra_start": extra_start,
+        "extra_end": extra_end,
+        "file_data_start": extra_end,
+    }
+
+
+def test_extra_field_exists_after_local_file_header_and_no_data_descriptor(tmp_path):
+    name = "gen_known_size_file.txt"
+
+    file = GenFile(
+        name=name,
+        generator=lorem_ipsum_generator(),
+        size=len(lorem_ipsum),
+        crc=zlib.crc32(lorem_ipsum),
+    )
+
+    zip_path = tmp_path / f"genFile_extra_field.zip"
+    zipfly = ZipFly([file])
+
+    with zip_path.open("wb") as fp:
+        for chunk in zipfly.stream():
+            fp.write(chunk)
+
+    data = zip_path.read_bytes()
+    header = _parse_local_file_header(data)
+
+    encoded_name = name.encode()
+
+    assert header["filename"] == encoded_name
+
+    assert header["filename_start"] == 30
+    assert header["filename_end"] == 30 + len(encoded_name)
+    assert header["extra_start"] == header["filename_end"]
+
+    assert header["extra_len"] > 0
+    assert len(header["extra"]) == header["extra_len"]
+
+    assert header["file_data_start"] == header["extra_end"]
+
+    assert header["flags"] & DATA_DESCRIPTOR_FLAG == 0
+
+
+def test_genfile_without_size_and_crc_uses_data_descriptor(tmp_path):
+    name = "gen_unknown_size_file.txt"
+
+    file = GenFile(
+        name=name,
+        generator=lorem_ipsum_generator(),
+        modification_time=time.time(),
+    )
+
+    zip_path = tmp_path / "gen_unknown_size_data_descriptor.zip"
+    zipfly = ZipFly([file])
+
+    with zip_path.open("wb") as fp:
+        for chunk in zipfly.stream():
+            fp.write(chunk)
+
+    data = zip_path.read_bytes()
+    header = _parse_local_file_header(data)
+
+    assert header["filename"] == name.encode()
+
+    assert header["flags"] & DATA_DESCRIPTOR_FLAG == DATA_DESCRIPTOR_FLAG
+
+    with zipfile.ZipFile(zip_path) as zfp:
+        info = zfp.getinfo(name)
+
+        assert info.file_size == len(lorem_ipsum)
+        assert info.CRC == zlib.crc32(lorem_ipsum)
+
+        with zfp.open(name) as fp:
+            assert fp.read() == lorem_ipsum
