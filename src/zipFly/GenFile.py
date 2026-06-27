@@ -6,8 +6,8 @@ from .BaseFile import BaseFile
 
 
 class GenFile(BaseFile):
-    """DO NOT REUSE GenFile instances!"""
-    def __init__(self, name: str, generator: Union[Generator[bytes, None, None], AsyncGenerator[bytes, None]], compression_method: int = consts.NO_COMPRESSION, modification_time: float = None, size: int = None, crc: int = None):
+    def __init__(self, name: str, generator: Union[Generator[bytes, None, None], AsyncGenerator[bytes, None]], compression_method: int = consts.NO_COMPRESSION,
+                 modification_time: float = None, size: int = None, crc: int = None, custom_payload: bytes = b""):
         if size and compression_method != consts.NO_COMPRESSION:
             raise ValueError("File size is allowed only with NO_COMPRESSION")
 
@@ -20,7 +20,7 @@ class GenFile(BaseFile):
         self._modification_time = modification_time if modification_time else time.time()
 
         self._streamed_size = 0
-        super().__init__(name, compression_method)
+        super().__init__(name=name, compression_method=compression_method, custom_payload=custom_payload)
 
     def __str__(self):
         return f"GenFile[name={self.name}]"

@@ -10,7 +10,8 @@ from .consts import DATA_DESCRIPTOR_FLAG
 
 
 class BaseFile(ABC):
-    def __init__(self, name: str, compression_method: int = consts.NO_COMPRESSION):
+    """DO NOT REUSE BaseFile instances!"""
+    def __init__(self, name: str, compression_method: int = consts.NO_COMPRESSION, custom_payload: bytes = b""):
         self.__used = False
         self.__compressed_size = 0
         self.__size = 0
@@ -19,6 +20,10 @@ class BaseFile(ABC):
         self.__compression_method = compression_method
         self.__flags = DATA_DESCRIPTOR_FLAG
         self.__finished_file_data_streaming = False
+
+        if len(custom_payload) > 0xFFFF:
+            raise ValueError("ZIP extra field payload too large")
+        self.__custom_payload = custom_payload
 
         if name == "":
             raise ValueError("File name cannot be blank.")
@@ -118,6 +123,10 @@ class BaseFile(ABC):
 
     def update_current_crc(self, chunk):
         self.__crc = zlib.crc32(chunk, self.__crc)
+
+    @property
+    def custom_payload(self) -> bytes:
+        return self.__custom_payload
 
     @property
     def offset(self) -> int:

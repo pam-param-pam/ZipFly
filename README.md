@@ -85,6 +85,9 @@ for chunk in zipFly.stream():
        # do something
 ```
 
+> [!TIP]
+> Files can also be created lazily. Byte offset will still work. `calculate_archive_size()` will not.
+
 ## Async interface
 
 ```py
@@ -165,7 +168,7 @@ If resume ZipFly instance has different files than pause ZipFly instance there w
 > You mustn't reuse `ZipFly` instances. They should be re-created everytime you call `stream()` or `async_stream()`
 
 > [!CAUTION]
-> You mustn't reuse `GenFile` instances. 
+> You mustn't reuse `File` instances. 
 
 
 ## Parallel async streaming

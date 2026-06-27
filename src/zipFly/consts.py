@@ -22,10 +22,16 @@ LOCAL_FILE_HEADER_TUPLE = namedtuple("fileheader",
                                       "crc", "uncompressed_size", "compressed_size",
                                       "file_name_len", "extra_field_len"))
 
-# ZIP64 LOCALEXTRA FIELD
+# ZIP64 LOCAL EXTRA FIELD
 ZIP64_LOCAL_EXTRA_FIELD_SIGNATURE = b'\x01\x00'
 ZIP64_LOCAL_EXTRA_FIELD_STRUCT = struct.Struct(b"<2sHQQ")
 ZIP64_LOCAL_EXTRA_FIELD_TUPLE = namedtuple("extra", ("signature", "extra_field_size", "size", "compressed_size"))
+
+
+# CUSTOM EXTRA FIELD
+CUSTOM_EXTRA_FIELD_SIGNATURE = b"\xfe\xca"
+CUSTOM_EXTRA_FIELD_HEADER_STRUCT = struct.Struct("<2sH")
+CUSTOM_EXTRA_FIELD_HEADER_TUPLE = namedtuple("custom_extra_header", ("signature", "payload_size"))
 
 
 # FILE DESCRIPTOR

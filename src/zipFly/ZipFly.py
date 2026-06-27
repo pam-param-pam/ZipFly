@@ -86,6 +86,9 @@ class ZipFly(ZipBase):
         if file.can_make_local_extra_field():
             block_size += self._ZIP64_LOCAL_EXTRA_FIELD_SIZE
 
+        if file.custom_payload:
+            block_size += 4 + len(file.custom_payload)
+
         block_size += file.predicted_size
         block_size += self._DATA_DESCRIPTOR_SIZE
 
@@ -165,6 +168,9 @@ class ZipFly(ZipBase):
 
         if file.can_make_local_extra_field():
             yield self._apply_remaining_offset(self._make_local_zip64_extra_field(file))
+
+        if file.custom_payload:
+            yield self._apply_remaining_offset(self._make_custom_extra_field(file))
 
     async def _async_stream_single_file_from_data(self, file: BaseFile, data_chunks: AsyncIterable[bytes]) -> AsyncGenerator[bytes, None]:
         """

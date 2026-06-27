@@ -1110,3 +1110,78 @@ async def test_zipfly_async_stream_parallel_prefetch_starts_ahead(tmp_path):
                 break
 
     assert started[:2] == [0, 1]
+
+
+def _find_extra_field(extra: bytes, expected_signature: str):
+    offset = 0
+
+    while offset + 4 <= len(extra):
+        signature = extra[offset:offset + 2]
+        payload_size = struct.unpack_from("<H", extra, offset + 2)[0]
+
+        payload_start = offset + 4
+        payload_end = payload_start + payload_size
+
+        assert payload_end <= len(extra)
+
+        if signature == expected_signature:
+            return extra[payload_start:payload_end]
+
+        offset = payload_end
+
+    return None
+
+
+def test_LocalFile_with_custom_payload_archive_is_valid_and_crc_is_correct(tmp_path):
+    name = "local_with_custom_payload.txt"
+    custom_payload = b"random nonsense payload"
+
+    input_path = tmp_path / "input.txt"
+    input_path.write_bytes(lorem_ipsum)
+
+    file = LocalFile(
+        name=name,
+        file_path=input_path,
+        custom_payload=custom_payload,
+    )
+
+    zip_path = tmp_path / "local_with_custom_payload.zip"
+    zipfly = ZipFly([file])
+
+    with zip_path.open("wb") as fp:
+        for chunk in zipfly.stream():
+            fp.write(chunk)
+
+    expected_crc = zlib.crc32(lorem_ipsum) & 0xFFFFFFFF
+
+    # Check that the archive is structurally valid and that Python can read it.
+    with zipfile.ZipFile(zip_path) as zfp:
+        assert zfp.testzip() is None, "Some files failed CRC check"
+
+        info = zfp.getinfo(name)
+
+        assert info.file_size == len(lorem_ipsum)
+        assert info.CRC == expected_crc
+
+        with zfp.open(name) as fp:
+            content = fp.read()
+
+        assert content == lorem_ipsum
+        assert zlib.crc32(content) & 0xFFFFFFFF == expected_crc
+
+    # Check that custom payload was written into the LOCAL extra field.
+    data = zip_path.read_bytes()
+    header = _parse_local_file_header(data)
+
+    assert header["filename"] == name.encode()
+    assert header["extra_len"] > 0
+
+    payload = _find_extra_field(
+        header["extra"],
+        consts.CUSTOM_EXTRA_FIELD_SIGNATURE,
+    )
+
+    assert zipfly.calculate_archive_size() == zip_path.stat().st_size
+
+    if custom_payload:
+        assert payload == custom_payload

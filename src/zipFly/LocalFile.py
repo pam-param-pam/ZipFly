@@ -10,7 +10,7 @@ from .BaseFile import BaseFile
 
 
 class LocalFile(BaseFile):
-    def __init__(self, file_path: Union[str, Path], name: str = None, compression_method: int = consts.NO_COMPRESSION, chunk_size=None):
+    def __init__(self, file_path: Union[str, Path], name: str = None, compression_method: int = consts.NO_COMPRESSION, chunk_size=None, custom_payload: bytes = b""):
         file_path = Path(file_path)
         if not file_path.is_file():
             raise ValueError(f"{file_path} is not a correct file path.")
@@ -20,7 +20,7 @@ class LocalFile(BaseFile):
         self.__crc = None
 
         name = name if name else self._file_path
-        super().__init__(name, compression_method)
+        super().__init__(name=name, compression_method=compression_method, custom_payload=custom_payload)
 
     def __str__(self):
         return f"LocalFile[name={self.name}]"

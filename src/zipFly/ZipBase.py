@@ -84,6 +84,13 @@ class ZipBase:
         """
         Create local file header for a ZIP64 archive   (4.3.7)
         """
+
+        extra_field_len = 0
+        if file.can_make_local_extra_field():
+            extra_field_len += 20
+        if file.custom_payload:
+            extra_field_len += 4 + len(file.custom_payload)
+
         fields = {
             "signature": consts.LOCAL_FILE_HEADER_SIGNATURE,
             "version_to_extract": ZIP64_VERSION,
@@ -95,7 +102,7 @@ class ZipBase:
             "uncompressed_size": 0xFFFFFFFF if file.can_make_local_extra_field() else 0,  # Correct value will be provided in data descriptor after we get all file data or in local extra field
             "compressed_size": 0xFFFFFFFF if file.can_make_local_extra_field() else 0,  # Correct value will be provided in data descriptor after we get all file data or in local extra field
             "file_name_len": len(file.file_path_bytes),
-            "extra_field_len": 20 if file.can_make_local_extra_field() else 0
+            "extra_field_len": extra_field_len
         }
 
         # Pack the local file header structure
@@ -113,13 +120,25 @@ class ZipBase:
             "signature": consts.ZIP64_LOCAL_EXTRA_FIELD_SIGNATURE,
             "extra_field_size": 16,
             "size": file.predicted_size,
-            "compressed_size": file.predicted_size,
+            "compressed_size": file.predicted_size
         }
 
         extra = consts.ZIP64_LOCAL_EXTRA_FIELD_TUPLE(**fields)
         extra = consts.ZIP64_LOCAL_EXTRA_FIELD_STRUCT.pack(*extra)
 
         return extra
+
+    def _make_custom_extra_field(self, file: BaseFile) -> bytes:
+        fields = {
+            "signature": consts.CUSTOM_EXTRA_FIELD_SIGNATURE,
+            "payload_size": len(file.custom_payload)
+        }
+
+        custom = consts.CUSTOM_EXTRA_FIELD_HEADER_TUPLE(**fields)
+        custom = consts.CUSTOM_EXTRA_FIELD_HEADER_STRUCT.pack(*custom)
+        custom += file.custom_payload
+
+        return custom
 
     def _make_data_descriptor(self, file: BaseFile) -> bytes:
         """
