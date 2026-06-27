@@ -1,4 +1,5 @@
 """Run tests of ZipFly."""
+import asyncio
 import re
 import struct
 import time
@@ -336,6 +337,37 @@ def test_zipfly_stream_reuse_raises():
         for _ in zip_fly.stream():
             break
 
+def create_input_files(file_count, file_cls, tmp_path, lorem_ipsum):
+    files = []
+
+    for i in range(file_count):
+        name = f"lorem_{i}.txt"
+
+        if file_cls == "local":
+            data_path = tmp_path / f"file_{i}.txt"
+            data_path.write_bytes(lorem_ipsum)
+
+            file = LocalFile(
+                file_path=data_path,
+                name=name,
+            )
+
+        elif file_cls == "gen":
+            file = GenFile(
+                name=name,
+                generator=lorem_ipsum_generator_async(),  # new generator every time
+                size=len(lorem_ipsum),
+                modification_time=time.time(),
+                crc=zlib.crc32(lorem_ipsum),
+            )
+
+        else:
+            raise ValueError("Unsupported file class")
+
+        files.append(file)
+
+    return files
+
 
 STOP_BYTE_VALUES = list(range(0, 2001, 50))
 
@@ -346,48 +378,24 @@ async def test_zipfly_resumable_async(tmp_path, STOP_BYTE, file_cls):
     out_file = tmp_path / f"{file_cls}_{STOP_BYTE}_resumed.zip"
     byte_offset = 0
     file_count = 2
-    files = []
 
-    # Create input files
-    for i in range(file_count):
-        name = f"lorem_{i}.txt"
-        if file_cls == "local":
-            data_path = tmp_path / f"file_{i}.txt"
-            data_path.write_bytes(lorem_ipsum)
-            file = LocalFile(
-                file_path=data_path,
-                name=name,
-            )
-        elif file_cls == "gen":
-            file = GenFile(
-                name=name,
-                generator=lorem_ipsum_generator_async(),
-                size=len(lorem_ipsum),
-                modification_time=time.time(),
-                crc=zlib.crc32(lorem_ipsum)
-            )
-        else:
-            raise ValueError("Unsupported file class")
-        files.append(file)
+    files1 = create_input_files(
+        file_count=file_count,
+        file_cls=file_cls,
+        tmp_path=tmp_path,
+        lorem_ipsum=lorem_ipsum,
+    )
 
-    zipFly1 = ZipFly(files)
+    zipFly1 = ZipFly(files1)
 
-    # If using GenFile, recreate generator objects for the resume ZipFly
-    if file_cls == "gen":
-        files_resume = [
-            GenFile(
-                name=f"lorem_{i}.txt",
-                generator=lorem_ipsum_generator_async(),
-                size=len(lorem_ipsum),
-                modification_time=time.time(),
-                crc=zlib.crc32(lorem_ipsum)
-            )
-            for i in range(file_count)
-        ]
-    else:
-        files_resume = files
+    resume_files = create_input_files(
+        file_count=file_count,
+        file_cls=file_cls,
+        tmp_path=tmp_path,
+        lorem_ipsum=lorem_ipsum,
+    )
 
-    zipFly2 = ZipFly(files_resume, byte_offset=STOP_BYTE)
+    zipFly2 = ZipFly(resume_files, byte_offset=STOP_BYTE)
 
     # Pause: write first part of the archive
     async def pause_zip_async():
@@ -413,16 +421,131 @@ async def test_zipfly_resumable_async(tmp_path, STOP_BYTE, file_cls):
     await pause_zip_async()
     await resume_zip_async()
 
-    # Validate archive
+    expected_crc = zlib.crc32(lorem_ipsum) & 0xFFFFFFFF
+
     with zipfile.ZipFile(out_file) as zfp:
         for i in range(file_count):
             file_name = f"lorem_{i}.txt"
+
             info = zfp.getinfo(file_name)
+
             assert info.file_size == len(lorem_ipsum)
+            assert info.CRC == expected_crc, (
+                f"CRC mismatch for {file_name}: "
+                f"zip={hex(info.CRC)}, expected={hex(expected_crc)}"
+            )
+
             with zfp.open(file_name) as tfp:
                 content = tfp.read()
-                assert content == lorem_ipsum
 
+            assert content == lorem_ipsum
+            assert zlib.crc32(content) & 0xFFFFFFFF == expected_crc
+
+def create_lazy_input_files(file_count, file_cls, tmp_path, lorem_ipsum, prefix="lazy"):
+    for i in range(file_count):
+        name = f"lorem_{i}.txt"
+
+        if file_cls == "local":
+            data_path = tmp_path / f"{prefix}_file_{i}.txt"
+            data_path.write_bytes(lorem_ipsum)
+
+            yield LocalFile(
+                file_path=data_path,
+                name=name,
+            )
+
+        elif file_cls == "gen":
+            yield GenFile(
+                name=name,
+                generator=lorem_ipsum_generator_async(),
+                size=len(lorem_ipsum),
+                modification_time=time.time(),
+                crc=zlib.crc32(lorem_ipsum),
+            )
+
+        else:
+            raise ValueError("Unsupported file class")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("STOP_BYTE", STOP_BYTE_VALUES)
+@pytest.mark.parametrize("file_cls", ["local", "gen"])
+async def test_zipfly_resumable_async_lazy_files(tmp_path, STOP_BYTE, file_cls):
+    out_file = tmp_path / f"{file_cls}_{STOP_BYTE}_lazy_resumed.zip"
+
+    byte_offset = 0
+    file_count = 2
+
+    files1 = create_lazy_input_files(
+        file_count=file_count,
+        file_cls=file_cls,
+        tmp_path=tmp_path,
+        lorem_ipsum=lorem_ipsum,
+        prefix=f"initial_{file_cls}_{STOP_BYTE}",
+    )
+
+    zipFly1 = ZipFly(files1)
+
+    resume_files = create_lazy_input_files(
+        file_count=file_count,
+        file_cls=file_cls,
+        tmp_path=tmp_path,
+        lorem_ipsum=lorem_ipsum,
+        prefix=f"resume_{file_cls}_{STOP_BYTE}",
+    )
+
+    zipFly2 = ZipFly(resume_files, byte_offset=STOP_BYTE)
+
+    # Pause: write first STOP_BYTE bytes of archive
+    async def pause_zip_async():
+        nonlocal byte_offset
+
+        with out_file.open("wb") as f_out:
+            async for chunk in zipFly1.async_stream():
+                remaining = STOP_BYTE - byte_offset
+
+                if remaining <= 0:
+                    break
+
+                if len(chunk) > remaining:
+                    chunk = chunk[:remaining]
+
+                f_out.write(chunk)
+                byte_offset += len(chunk)
+
+                if byte_offset >= STOP_BYTE:
+                    break
+
+    # Resume: append archive bytes from STOP_BYTE onward
+    async def resume_zip_async():
+        with out_file.open("ab") as f_out:
+            async for chunk in zipFly2.async_stream():
+                f_out.write(chunk)
+
+    await pause_zip_async()
+    await resume_zip_async()
+
+    assert byte_offset == STOP_BYTE
+
+    expected_crc = zlib.crc32(lorem_ipsum) & 0xFFFFFFFF
+
+    with zipfile.ZipFile(out_file) as zfp:
+        for i in range(file_count):
+            file_name = f"lorem_{i}.txt"
+
+            info = zfp.getinfo(file_name)
+
+            assert info.file_size == len(lorem_ipsum)
+            assert info.CRC == expected_crc, (
+                f"CRC mismatch for {file_name}: "
+                f"zip={hex(info.CRC)}, expected={hex(expected_crc)}"
+            )
+
+            with zfp.open(file_name) as tfp:
+                content = tfp.read()
+
+            assert content == lorem_ipsum
+            assert zlib.crc32(content) & 0xFFFFFFFF == expected_crc
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("file_cls", ["local", "gen"])
@@ -773,3 +896,217 @@ def test_extra_field_exists_after_local_file_header_and_no_data_descriptor(tmp_p
     assert len(header["extra"]) == header["extra_len"]
 
     assert header["file_data_start"] == header["extra_end"]
+
+
+def lazy_local_files(tmp_path, file_count: int):
+    for i in range(file_count):
+        path = tmp_path / f"lazy_local_{i}.txt"
+        path.write_bytes(lorem_ipsum)
+
+        yield LocalFile(
+            file_path=path,
+            name=f"lazy_{i}.txt",
+        )
+
+
+def test_zipfly_lazy_local_files_stream(tmp_path):
+    file_count = 5
+    zip_path = tmp_path / "lazy_local_files.zip"
+
+    files = lazy_local_files(tmp_path, file_count)
+    zipfly = ZipFly(files)
+
+    with zip_path.open("wb") as fp:
+        for chunk in zipfly.stream():
+            fp.write(chunk)
+
+    with zipfile.ZipFile(zip_path) as zfp:
+        names = zfp.namelist()
+
+        assert len(names) == file_count
+
+        for i in range(file_count):
+            name = f"lazy_{i}.txt"
+            assert name in names
+
+            with zfp.open(name) as fp:
+                assert fp.read() == lorem_ipsum
+
+
+def lazy_gen_files(file_count: int):
+    for i in range(file_count):
+        yield GenFile(
+            name=f"lazy_gen_{i}.txt",
+            generator=lorem_ipsum_generator_async(),
+            size=len(lorem_ipsum),
+            modification_time=time.time(),
+            crc=zlib.crc32(lorem_ipsum),
+        )
+
+
+@pytest.mark.asyncio
+async def test_zipfly_lazy_gen_files_async_stream(tmp_path):
+    file_count = 5
+    zip_path = tmp_path / "lazy_gen_files_async.zip"
+
+    files = lazy_gen_files(file_count)
+    zipfly = ZipFly(files)
+
+    with zip_path.open("wb") as fp:
+        async for chunk in zipfly.async_stream():
+            fp.write(chunk)
+
+    with zipfile.ZipFile(zip_path) as zfp:
+        names = zfp.namelist()
+
+        assert len(names) == file_count
+
+        for i in range(file_count):
+            name = f"lazy_gen_{i}.txt"
+            assert name in names
+
+            with zfp.open(name) as fp:
+                assert fp.read() == lorem_ipsum
+
+
+def test_zipfly_does_not_eagerly_consume_lazy_files(tmp_path):
+    consumed = 0
+
+    def files():
+        nonlocal consumed
+
+        for i in range(3):
+            consumed += 1
+
+            path = tmp_path / f"lazy_not_eager_{i}.txt"
+            path.write_bytes(lorem_ipsum)
+
+            yield LocalFile(
+                file_path=path,
+                name=f"lazy_not_eager_{i}.txt",
+            )
+
+    zipfly = ZipFly(files())
+
+    assert consumed == 0
+
+    zip_path = tmp_path / "lazy_not_eager.zip"
+
+    with zip_path.open("wb") as fp:
+        for chunk in zipfly.stream():
+            fp.write(chunk)
+
+    assert consumed == 3
+
+    with zipfile.ZipFile(zip_path) as zfp:
+        assert len(zfp.namelist()) == 3
+
+
+@pytest.mark.asyncio
+async def test_zipfly_resumable_lazy_files_not_consumed_on_init(tmp_path):
+    consumed = 0
+
+    def files():
+        nonlocal consumed
+
+        for i in range(2):
+            consumed += 1
+
+            path = tmp_path / f"lazy_resume_init_{i}.txt"
+            path.write_bytes(lorem_ipsum)
+
+            yield LocalFile(
+                file_path=path,
+                name=f"lorem_{i}.txt",
+            )
+
+    zipfly = ZipFly(files(), byte_offset=50)
+
+    assert consumed == 0
+
+    chunks = []
+    async for chunk in zipfly.async_stream():
+        chunks.append(chunk)
+
+    assert consumed > 0
+    assert chunks
+
+def test_zipfly_lazy_files_calculate_archive_size_raises(tmp_path):
+    files = lazy_local_files(tmp_path, 2)
+    zipfly = ZipFly(files)
+
+    with pytest.raises(RuntimeError, match="Cannot calculate archive size for lazy files. Use a list of files instead."):
+        zipfly.calculate_archive_size()
+
+
+@pytest.mark.asyncio
+async def test_zipfly_async_stream_parallel_lazy_gen_files(tmp_path):
+    file_count = 10
+    chunk = b"x" * 1024
+    chunks_per_file = 10
+    expected_content = chunk * chunks_per_file
+
+    def lazy_files():
+        for i in range(file_count):
+            yield GenFile(
+                name=f"prefetch_{i}.txt",
+                generator=generate_data_async(chunk, chunks_per_file)(),
+                modification_time=time.time(),
+                compression_method=consts.COMPRESSION_DEFLATE,
+            )
+
+    zip_path = tmp_path / "prefetch_lazy_gen_files.zip"
+    zipfly = ZipFly(lazy_files())
+
+    with zip_path.open("wb") as fp:
+        async for zip_chunk in zipfly.async_stream_parallel(prefetch_files=3):
+            fp.write(zip_chunk)
+
+    with zipfile.ZipFile(zip_path) as zfp:
+        names = zfp.namelist()
+
+        assert len(names) == file_count
+
+        for i in range(file_count):
+            name = f"prefetch_{i}.txt"
+            assert name in names
+
+            with zfp.open(name) as fp:
+                assert fp.read() == expected_content
+
+@pytest.mark.asyncio
+async def test_zipfly_async_stream_parallel_prefetch_starts_ahead(tmp_path):
+    started = []
+
+    async def tracked_generator(index: int):
+        started.append(index)
+
+        yield f"file-{index}-chunk-1\n".encode()
+        await asyncio.sleep(0.01)
+        yield f"file-{index}-chunk-2\n".encode()
+
+    def lazy_files():
+        for i in range(5):
+            yield GenFile(
+                name=f"tracked_{i}.txt",
+                generator=tracked_generator(i),
+                modification_time=time.time(),
+                compression_method=consts.COMPRESSION_DEFLATE,
+            )
+
+    zip_path = tmp_path / "prefetch_starts_ahead.zip"
+    zipfly = ZipFly(lazy_files())
+
+    with zip_path.open("wb") as fp:
+        async for zip_chunk in zipfly.async_stream_parallel(
+            prefetch_files=3,
+            max_chunks_per_file=1,
+        ):
+            fp.write(zip_chunk)
+
+            # Once streaming has started, prefetch should have started more than
+            # only the currently written file.
+            if len(started) >= 2:
+                break
+
+    assert started[:2] == [0, 1]

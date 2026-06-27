@@ -1,7 +1,6 @@
 import time
 from typing import Generator, AsyncGenerator
 
-from . import consts
 from .BaseFile import BaseFile
 
 

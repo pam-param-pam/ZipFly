@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zipFly64"
-version = "1.4.2"
+version = "1.5.0"
 description = "Stream zip64 archives on the fly."
 readme = "README.md"
 authors = [{ name = "Pamparampampam" }]

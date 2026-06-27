@@ -1,5 +1,3 @@
-from typing import List
-
 from . import consts
 from .BaseFile import BaseFile
 from .consts import ZIP64_VERSION, VERSION_MADE_BY
@@ -8,15 +6,15 @@ from .consts import ZIP64_VERSION, VERSION_MADE_BY
 Since the Official ZIP docs are terrible, here's a detailed structure of the zip this library builds. (Pretty sure mine's just as bad lol)
 
   [local file header 1]            |
-  [file data 1]                    |
   [OPTIONAL extra field 1]         |
+  [file data 1]                    |
   [data descriptor 1]              |
   .                                |
   .                                } - This part of the of zip holds the file data. Local file headers are lowkey useless(nevertheless needed for zip to work).
   .                                |        Data descriptors allow to stream the file(and create file headers) without knowing the size of file data. Instead of putting
-  [local file header n]            |        things like: CRC, uncompressed_size, compressed_size etc in file headers, you only put placeholder values there (0xFFFFFFFF),                                    
-  [file data n]                    |        and fill them later in data descriptor(after you have produced/gathered the file data, and actually know the file's metadata).
-  [OPTIONAL extra field n]         |
+  [local file header n]            |        things like: CRC, uncompressed_size, compressed_size etc in file headers, you only put placeholder values there (0xFFFFFFFF), 
+  [OPTIONAL extra field n]         |        and fill them later in data descriptor(after you have produced/gathered the file data, and actually know the file's metadata).
+  [file data n]                    |        
   [data descriptor n]              |
   
   
@@ -77,8 +75,7 @@ End of central directory record: Section 4.3.16
 
 
 class ZipBase:
-    def __init__(self, files: List[BaseFile]):
-        self._files = files
+    def __init__(self):
         self._offset = 0  # Tracks the current offset within the ZIP archive
         self._cdir_size = 0
         self._offset_to_start_of_central_dir = 0
@@ -188,7 +185,7 @@ class ZipBase:
 
         return extra
 
-    def _make_zip64_end_of_cdir_record(self) -> bytes:
+    def _make_zip64_end_of_cdir_record(self, total_files: int) -> bytes:
         """
         Create the ZIP64 end of central directory record.  (4.3.14)
         """
@@ -199,8 +196,8 @@ class ZipBase:
             "version_to_extract": ZIP64_VERSION,
             "number_of_this_disk": 0,
             "cd_start": 0,
-            "cd_entries_this_disk": len(self._files),
-            "cd_entries_total": len(self._files),
+            "cd_entries_this_disk": total_files,
+            "cd_entries_total": total_files,
             "cd_size": self._cdir_size,
             "cd_offset": self._offset_to_start_of_central_dir
         }
@@ -227,7 +224,7 @@ class ZipBase:
 
         return locator
 
-    def _make_end_of_cdir_record(self) -> bytes:
+    def _make_end_of_cdir_record(self, total_files: int) -> bytes:
         """
         Create the end of central directory record.  (4.3.16)
         """
@@ -235,8 +232,8 @@ class ZipBase:
             "signature": consts.END_OF_CENTRAL_DIR_RECORD_SIGNATURE,
             "number_of_this_disk": 0,
             "number_of_disk_with_start_central_dir": 0,
-            "total_entries_on_this_disk": len(self._files),
-            "total_entries_total": len(self._files),
+            "total_entries_on_this_disk": total_files,
+            "total_entries_total": total_files,
             "central_directory_size": 0xFFFFFFFF,
             "offset_of_central_directory": 0xFFFFFFFF,
             "comment_length": 0  # No comment
@@ -246,6 +243,9 @@ class ZipBase:
         eocd = consts.END_OF_CENTRAL_DIR_RECORD_STRUCT.pack(*eocd)
 
         return eocd
+
+    def _add_cdir_size(self, value: int) -> None:
+        self._cdir_size += value
 
     def _set_offset(self, value: int) -> None:
         self._offset = value
