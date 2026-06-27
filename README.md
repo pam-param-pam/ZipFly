@@ -188,10 +188,7 @@ I created this library for my [iDrive](https://github.com/pam-param-pam/I-Drive)
 
 If you have a different use case scenario, and LocalFile and GenFile are not enough, you can extend BaseFile and everything else should work out of the box.
 
-If you extend `BaseFile` keep in mind that `zipFly` attempts to "deepcopy" files. It will successfully 
-deepcopy `LocalFile`, so LocalFile instances can be re-used. However, it will completely skip deep-coping any file 
-instance that has a generator.
-
+I found myself needing to write custom payloads after `local file headers` and before the actual file data. You can pass `custom_payload` to `File` instances.
 ### Testing
 
 With [pytest](https://docs.pytest.org/en/stable/) and
