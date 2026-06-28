@@ -11,7 +11,7 @@ from .consts import DATA_DESCRIPTOR_FLAG
 
 class BaseFile(ABC):
     """DO NOT REUSE BaseFile instances!"""
-    def __init__(self, name: str, compression_method: int = consts.NO_COMPRESSION, custom_payload: bytes = b""):
+    def __init__(self, name: str, compression_method: int = consts.NO_COMPRESSION, custom_payload: bytes = b"", validate_crc: bool = True):
         self.__used = False
         self.__compressed_size = 0
         self.__size = 0
@@ -20,6 +20,7 @@ class BaseFile(ABC):
         self.__compression_method = compression_method
         self.__flags = DATA_DESCRIPTOR_FLAG
         self.__finished_file_data_streaming = False
+        self.__validate_crc = validate_crc
 
         if len(custom_payload) > 0xFFFF:
             raise ValueError("ZIP extra field payload too large")
@@ -86,7 +87,7 @@ class BaseFile(ABC):
         if self.predicted_size is not None and self.predicted_size != self.size:
             raise RuntimeError(f"Size({self.predicted_size}) != streamed size({self.size})")
 
-        if self.predicted_crc is not None and self.predicted_crc != self.crc:
+        if self.__validate_crc and self.predicted_crc is not None and self.predicted_crc != self.crc:
             raise RuntimeError(f"Crc({self.predicted_crc}) != streamed crc({self.crc})")
 
     def get_mod_time(self) -> int:
