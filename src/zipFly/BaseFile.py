@@ -22,7 +22,7 @@ class BaseFile(ABC):
         self.__finished_file_data_streaming = False
         self.__validate_crc = validate_crc
 
-        if len(custom_payload) > 0xFFFF:
+        if custom_payload and len(custom_payload) > 0xFFFF:
             raise ValueError("ZIP extra field payload too large")
         self.__custom_payload = custom_payload
 
@@ -170,6 +170,10 @@ class BaseFile(ABC):
     def crc(self) -> int:
         if not self.__finished_file_data_streaming:
             raise RuntimeError("Crc called before file data finished streaming. Use predicted_crc instead.")
+
+        if not self.__validate_crc and self.predicted_crc:
+            return self.predicted_crc
+
         return self.__crc
 
     @property
